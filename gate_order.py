@@ -160,8 +160,8 @@ class GateOrder:
                 raise ValueError(f"Invalid axis in connection type: {descriptor.connection_type}")
             
             # The stabilizer support already contains the correct qubits in the right order
-            # For X stabilizers: [on_site_L, on_site_R, axis_0_L, axis_1_R, ...]
-            # For Z stabilizers: [on_site_L, on_site_R, axis_0_R, axis_1_L, ...]
+            # For X stabilizers: [on_site_L, on_site_R, axis_0_R, axis_1_L, axis_2_R, axis_3_L, ...]
+            # For Z stabilizers: [on_site_L, on_site_R, axis_0_L, axis_1_R, axis_2_L, axis_3_R, ...]
             
             # Calculate the index in the support list
             # On-site qubits are at indices 0 and 1

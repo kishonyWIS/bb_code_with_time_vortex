@@ -152,8 +152,8 @@ class QubitSystem:
         
         X stabilizer support includes:
         - On-site: both L and R qubits at the point
-        - First half axes (0 to D//2-1): L qubits at point + positive shift along each axis
-        - Second half axes (D//2 to D-1): R qubits at point + positive shift along each axis
+        - Even axes: R qubits at point + positive shift along each axis
+        - Odd axes: L qubits at point + positive shift along each axis
         
         Args:
             point: Lattice point for the stabilizer
@@ -168,18 +168,17 @@ class QubitSystem:
         support.append((self.get_qubit_index(normalized_point, 'L'), 'L'))
         support.append((self.get_qubit_index(normalized_point, 'R'), 'R'))
         
-        # First half axes: L qubits with positive shift
-        first_half_end = self.lattice.dimension // 2
-        for axis in range(first_half_end):
-            shift = self.lattice.get_axis_vector(axis)
-            shifted_point = self.lattice.get_shifted_point(normalized_point, shift)
-            support.append((self.get_qubit_index(shifted_point, 'L'), 'L'))
-        
-        # Second half axes: R qubits with positive shift
-        for axis in range(first_half_end, self.lattice.dimension):
+        # Even axes: R qubits with positive shift
+        for axis in range(0, self.lattice.dimension, 2):
             shift = self.lattice.get_axis_vector(axis)
             shifted_point = self.lattice.get_shifted_point(normalized_point, shift)
             support.append((self.get_qubit_index(shifted_point, 'R'), 'R'))
+        
+        # Odd axes: L qubits with positive shift
+        for axis in range(1, self.lattice.dimension, 2):
+            shift = self.lattice.get_axis_vector(axis)
+            shifted_point = self.lattice.get_shifted_point(normalized_point, shift)
+            support.append((self.get_qubit_index(shifted_point, 'L'), 'L'))
         
         return support
     
@@ -189,8 +188,8 @@ class QubitSystem:
         
         Z stabilizer support includes:
         - On-site: both L and R qubits at the point
-        - Second half axes: L qubits at point + negative shift along each axis
-        - First half axes: R qubits at point + negative shift along each axis
+        - Even axes: L qubits at point + negative shift along each axis
+        - Odd axes: R qubits at point + negative shift along each axis
         
         Args:
             point: Lattice point for the stabilizer
@@ -205,15 +204,14 @@ class QubitSystem:
         support.append((self.get_qubit_index(normalized_point, 'L'), 'L'))
         support.append((self.get_qubit_index(normalized_point, 'R'), 'R'))
         
-        # Second half axes: L qubits with negative shift
-        first_half_end = self.lattice.dimension // 2
-        for axis in range(first_half_end, self.lattice.dimension):
+        # Even axes: L qubits with negative shift
+        for axis in range(0, self.lattice.dimension, 2):
             shift = -self.lattice.get_axis_vector(axis)
             shifted_point = self.lattice.get_shifted_point(normalized_point, shift)
             support.append((self.get_qubit_index(shifted_point, 'L'), 'L'))
         
-        # First half axes: R qubits with negative shift
-        for axis in range(first_half_end):
+        # Odd axes: R qubits with negative shift
+        for axis in range(1, self.lattice.dimension, 2):
             shift = -self.lattice.get_axis_vector(axis)
             shifted_point = self.lattice.get_shifted_point(normalized_point, shift)
             support.append((self.get_qubit_index(shifted_point, 'R'), 'R'))
