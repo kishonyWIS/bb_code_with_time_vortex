@@ -3,6 +3,7 @@ Syndrome extraction circuit builder for Stim.
 """
 
 import stim
+import numpy as np
 from typing import List, Union, Dict, Optional
 from circuit_operations import CircuitOperation, Reset, Measure, Tick, CX, Depolarize2, Detector, Observable
 from gate_order import GateOrder
@@ -152,34 +153,27 @@ class SyndromeCircuit:
             z_ancilla = self.qubit_system.get_qubit_index(point, "Z_anc")
             self._operations.append(Reset(time, z_ancilla, "Z"))
     
+    def _add_single_ancilla_measurement(self, time: float, ancilla_idx: int, basis: str) -> None:
+        """Helper to measure a single ancilla and track its measurement index."""
+        measure_op = Measure(time, ancilla_idx, basis)
+        self._operations.append(measure_op)
+        
+        # Update measurement index for this qubit
+        if ancilla_idx not in self._measurement_indices:
+            self._measurement_indices[ancilla_idx] = []
+        self._measurement_indices[ancilla_idx].append(self._next_measurement_index)
+        self._next_measurement_index += 1
+    
     def _add_measure_operations(self, time: float) -> None:
         """Add measurement operations for all ancillas at the given time."""
         for point in self.lattice_points:
             # Measure X ancillas in X basis
             x_ancilla = self.qubit_system.get_qubit_index(point, "X_anc")
-            measure_op = Measure(time, x_ancilla, "X")
-            self._operations.append(measure_op)
-            
-            # Detectors will be added after circuit construction
-            
-            # Update measurement index for this qubit
-            if x_ancilla not in self._measurement_indices:
-                self._measurement_indices[x_ancilla] = []
-            self._measurement_indices[x_ancilla].append(self._next_measurement_index)
-            self._next_measurement_index += 1
+            self._add_single_ancilla_measurement(time, x_ancilla, "X")
             
             # Measure Z ancillas in Z basis
             z_ancilla = self.qubit_system.get_qubit_index(point, "Z_anc")
-            measure_op = Measure(time, z_ancilla, "Z")
-            self._operations.append(measure_op)
-            
-            # Detectors will be added after circuit construction
-            
-            # Update measurement index for this qubit
-            if z_ancilla not in self._measurement_indices:
-                self._measurement_indices[z_ancilla] = []
-            self._measurement_indices[z_ancilla].append(self._next_measurement_index)
-            self._next_measurement_index += 1
+            self._add_single_ancilla_measurement(time, z_ancilla, "Z")
     
     def to_stim_circuit(self) -> stim.Circuit:
         """
@@ -303,7 +297,6 @@ class SyndromeCircuit:
     
     def _add_initial_state_preparation(self, time: float) -> None:
         """Add initial state preparation (RX for X-basis measurement)."""
-        from circuit_operations import Reset
         for point in self.lattice_points:
             l_qubit = self.qubit_system.get_qubit_index(point, 'L')
             r_qubit = self.qubit_system.get_qubit_index(point, 'R')
@@ -327,6 +320,19 @@ class SyndromeCircuit:
             # Track measurement indices for observables
             self._next_measurement_index += 2
     
+    def _add_observables_for_basis(self, time: float, logical_ops: List[np.ndarray], observable_id_offset: int) -> None:
+        """Helper to add observables for a specific basis."""
+        for i, logical_op in enumerate(logical_ops):
+            measurement_indices = []
+            for j, val in enumerate(logical_op):
+                if val == 1:
+                    # Calculate the measurement index relative to the end
+                    # Data qubits are measured at the end in order
+                    measurement_indices.append(len(self.lattice_points) * 2 - j)
+            if measurement_indices:
+                obs = Observable(time, observable_id_offset + i, measurement_indices)
+                self._operations.append(obs)
+    
     def _add_observables(self, time: float) -> None:
         """Add observable instructions for logical operators."""
         if self.logical_operators is None:
@@ -334,36 +340,14 @@ class SyndromeCircuit:
         
         num_logical = self.logical_operators.get_num_logical_qubits()
         
-        # Add observables based on the basis
         if self.basis == 'Z':
             # Z-basis measurements detect Z logical operators
-            for i in range(min(num_logical, len(self.logical_operators.logical_z_ops))):
-                logical_op = self.logical_operators.logical_z_ops[i]
-                # Find which data qubits have support
-                measurement_indices = []
-                for j, val in enumerate(logical_op):
-                    if val == 1:
-                        # Calculate the measurement index relative to the end
-                        # Data qubits are measured at the end in order
-                        measurement_indices.append(len(self.lattice_points) * 2 - j)
-                
-                if measurement_indices:
-                    obs = Observable(time, i, measurement_indices)
-                    self._operations.append(obs)
+            ops = self.logical_operators.logical_z_ops[:num_logical]
+            self._add_observables_for_basis(time, ops, 0)
         else:  # X basis
             # X-basis measurements detect X logical operators
-            for i in range(min(num_logical, len(self.logical_operators.logical_x_ops))):
-                logical_op = self.logical_operators.logical_x_ops[i]
-                # Find which data qubits have support
-                measurement_indices = []
-                for j, val in enumerate(logical_op):
-                    if val == 1:
-                        # Calculate the measurement index relative to the end
-                        measurement_indices.append(len(self.lattice_points) * 2 - j)
-                
-                if measurement_indices:
-                    obs = Observable(time, i, measurement_indices)
-                    self._operations.append(obs)
+            ops = self.logical_operators.logical_x_ops[:num_logical]
+            self._add_observables_for_basis(time, ops, 0)
     
     def _add_detectors_after_circuit(self, time: float) -> None:
         """
@@ -372,8 +356,6 @@ class SyndromeCircuit:
         For each ancilla qubit, track measurement indices across cycles.
         Create detectors for consecutive measurements of the same ancilla.
         """
-        from circuit_operations import Detector
-        
         # Create detectors for consecutive measurements of each ancilla
         for ancilla_idx, measurement_indices in self._measurement_indices.items():
             # For each ancilla, create detectors between consecutive measurements
