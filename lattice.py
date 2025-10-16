@@ -334,114 +334,108 @@ class Lattice:
         vec[axis] = 1
         return vec
     
+    def _fundamental_box_rows(self, B):
+        """
+        Compute tight integer bounds [lows[i], highs[i]] for each coordinate i
+        such that the fundamental parallelepiped F_B = {B t : t in [0,1)^d} 
+        is contained in the box [lows[0], highs[0]] x ... x [lows[d-1], highs[d-1]].
+        
+        Returns:
+            (lows, highs) where lows[i] and highs[i] are integers
+        """
+        import sympy as sp
+        
+        d = B.rows
+        lows = []
+        highs = []
+        
+        for i in range(d):
+            # For coordinate i, find min and max of (B t)[i] over t in [0,1)^d
+            # This is equivalent to finding min/max of sum(B[i,j] * t[j] for j in range(d))
+            # where each t[j] in [0,1)
+            
+            min_val = 0
+            max_val = 0
+            
+            for j in range(d):
+                coeff = int(B[i, j])
+                if coeff >= 0:
+                    max_val += coeff  # t[j] = 1 maximizes this term
+                else:
+                    min_val += coeff  # t[j] = 0 minimizes this term (coeff < 0)
+            
+            lows.append(min_val)
+            highs.append(max_val)
+        
+        return lows, highs
+
     def get_all_lattice_points(self) -> List[Point]:
         """
         Return all integer points in the half-open fundamental domain P(A) = {A t | t in [0,1)^n} ∩ Z^n.
         
-        Uses Smith Normal Form (via sympy) for exact and efficient enumeration.
-        Falls back to a brute-force method when sympy is unavailable.
+        Uses exact arithmetic (sympy) for precise enumeration with tight bounding box.
         
         Returns:
             List of all unique lattice points in the fundamental domain (exactly |det(A)| points)
         """
+        import sympy as sp
+        from itertools import product
+        
         n = self.dimension
         basis = self.lattice_vectors.tolist()
         
-        # Helper: compute determinant using Fraction-based Gaussian elimination
-        def det_fraction(M):
-            m = [[Fraction(x) for x in row] for row in M]
-            n = len(m)
-            det = Fraction(1, 1)
-            for i in range(n):
-                p = i
-                while p < n and m[p][i] == 0:
-                    p += 1
-                if p == n:
-                    return Fraction(0, 1)
-                if p != i:
-                    m[i], m[p] = m[p], m[i]
-                    det *= -1
-                piv = m[i][i]
-                det *= piv
-                for r in range(i + 1, n):
-                    if m[r][i] == 0:
-                        continue
-                    f = m[r][i] / piv
-                    for c in range(i, n):
-                        m[r][c] -= f * m[i][c]
-            return det
-        
-        D = det_fraction(basis)
-        if D == 0:
+        # Compute determinant using sympy for exact arithmetic
+        A_sym = sp.Matrix(basis)
+        det_sym = A_sym.det()
+        if det_sym == 0:
             raise ValueError("Lattice vectors must be linearly independent (nonzero determinant).")
-        detA = abs(int(D))
+        detA = abs(int(det_sym))
         
         if detA > 1000:
             raise ValueError(f"Lattice has too many points ({detA}) for enumeration. "
                            "Consider using a smaller lattice.")
         
-        # Try the fast exact method (sympy SNF)
-        try:
-            import sympy as sp
-            A_sym = sp.Matrix(basis)
-            # smith_normal_form returns (D, U, V) with U*A*V = D
-            D_sym, U_sym, V_sym = A_sym.smith_normal_form()
-            # Invert U and A over the rationals (exact)
-            Uinv = U_sym.inv()  # unimodular -> integer inverse
-            Ainv = A_sym.inv()  # rational exact
-            
-            # diagonal invariants
-            diags = [int(D_sym[i, i]) for i in range(n)]
-            # Defensive: if any diagonal is 0 (shouldn't happen for full-rank), raise
-            if any(d <= 0 for d in diags):
-                raise ValueError("Smith Normal Form produced a zero diagonal; basis may be rank-deficient.")
-            
-            points = []
-            seen = set()
-            for coords in product(*[range(d) for d in diags]):
-                r = sp.Matrix(coords)
-                q = Uinv * r                     # an integer coset representative in Z^n
-                y = Ainv * q                     # real vector
-                t = sp.Matrix([int(sp.floor(y[i])) for i in range(n)])
-                p = q - A_sym * t                # in the fundamental domain
-                tup = tuple(int(p[i]) for i in range(n))
-                if tup not in seen:
-                    seen.add(tup)
-                    points.append(Point(list(tup)))
-            
-            points.sort(key=lambda pt: tuple(pt.coords))
-            # sanity: should be exactly |det A|
-            if len(points) != detA:
-                # Extremely rare; but dedup + SNF path should yield |det A|
-                # Fall back to brute-force if mismatch
-                raise RuntimeError("SNF path produced unexpected count; falling back.")
-            
-            return points
+        # --------- Exact box enumeration with tight bounds ----------
+        # Build a tight integer bounding box that contains F_A
+        lows, highs = self._fundamental_box_rows(A_sym)
         
-        except Exception:
-            # Fallback (no sympy): enumerate x in [0,detA-1]^n and fold into P(A).
-            # Implement exact inverse via Fractions (Gauss-Jordan).
-            Ainv_frac = self._invert_matrix_fraction(basis)
+        Ainv = A_sym.inv()  # exact rational inverse (since det != 0)
+        points = []
+        seen = set()
+        ranges = [range(lows[i], highs[i] + 1) for i in range(n)]
+        
+        for coords in product(*ranges):
+            x = sp.Matrix(coords)
+            t = Ainv * x  # exact rationals
             
-            points_set = set()
-            # Helper to floor Fractions componentwise
-            def floor_vec(v):
-                return [int(floor(v[i])) for i in range(n)]
+            # Check t in [0,1)^n
+            ok = True
+            for ti in t:
+                # ti should be in [0,1)
+                # We use exact comparisons on rationals
+                if not (ti >= 0 and ti < 1):
+                    ok = False
+                    break
+            if not ok:
+                continue
+                
+            tup = tuple(int(x[i]) for i in range(n))
+            if tup not in seen:
+                seen.add(tup)
+                points.append(Point(list(tup)))
             
-            for x in product(range(detA), repeat=n):
-                # y = A^{-1} x
-                y = self._matvec(Ainv_frac, list(x))
-                t = floor_vec(y)
-                # p = x - A t
-                At = self._matvec_int(basis, t)
-                p = tuple(x[i] - At[i] for i in range(n))
-                points_set.add(p)
-                if len(points_set) == detA:
-                    # Done (we've collected all unique points)
-                    pass
-            
-            points = [Point(list(p)) for p in sorted(points_set)]
-            return points
+            # Early exit if we've collected all points we know must exist
+            if len(points) == detA:
+                break
+        
+        points.sort(key=lambda pt: tuple(pt.coords))
+        
+        # Sanity check: should be exactly |det A|
+        if len(points) != detA:
+            raise RuntimeError(f"Enumeration produced {len(points)} points, "
+                             f"expected {detA}. This indicates a bug in the implementation.")
+        
+        return points
     
     def __repr__(self) -> str:
         """String representation."""
