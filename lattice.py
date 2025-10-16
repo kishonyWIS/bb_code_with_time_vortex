@@ -120,6 +120,72 @@ class Lattice:
         except np.linalg.LinAlgError:
             raise ValueError("Lattice vectors must be linearly independent")
     
+    def _invert_matrix_fraction(self, M):
+        """Helper method to invert a matrix using Fraction-based Gaussian elimination."""
+        m = [[Fraction(int(v)) for v in row] for row in M]
+        n = len(m)
+        I = [[Fraction(int(i == j)) for j in range(n)] for i in range(n)]
+        for col in range(n):
+            piv = col
+            while piv < n and m[piv][col] == 0:
+                piv += 1
+            if piv == n:
+                raise ValueError("Lattice vectors must be linearly independent")
+            if piv != col:
+                m[col], m[piv] = m[piv], m[col]
+                I[col], I[piv] = I[piv], I[col]
+            pv = m[col][col]
+            invpv = Fraction(1, 1) / pv
+            for j in range(n):
+                m[col][j] *= invpv
+                I[col][j] *= invpv
+            for r in range(n):
+                if r == col:
+                    continue
+                f = m[r][col]
+                if f == 0:
+                    continue
+                for j in range(n):
+                    m[r][j] -= f * m[col][j]
+                    I[r][j] -= f * I[col][j]
+        return I
+    
+    def _matvec(self, M, v):
+        """Helper method for matrix-vector multiplication."""
+        n = len(M)
+        return [sum(M[i][j] * v[j] for j in range(n)) for i in range(n)]
+    
+    def _matvec_int(self, M, v):
+        """Helper method for matrix-vector multiplication with integer result."""
+        n = len(M)
+        return [sum(M[i][j] * v[j] for j in range(n)) for i in range(n)]
+    
+    def _convert_to_appropriate_type(self, values, original_is_int, epsilon):
+        """Helper method to convert values to appropriate types (preserving int vs float)."""
+        result = []
+        for val in values:
+            if hasattr(val, 'is_Integer') and val.is_Integer:
+                result.append(int(val))
+            elif hasattr(val, 'is_Rational') and val.is_Rational:
+                # Try to convert to int if it's close enough
+                float_val = float(val)
+                int_val = int(round(float_val))
+                if abs(float_val - int_val) < epsilon:
+                    result.append(int_val)
+                else:
+                    result.append(float_val)
+            else:
+                result.append(float(val))
+        
+        # If original input was all integers, try to keep result as integers
+        if original_is_int:
+            # Check if all results are close to integers
+            all_close_to_int = all(abs(r - round(r)) < epsilon for r in result)
+            if all_close_to_int:
+                result = [int(round(r)) for r in result]
+        
+        return result
+    
     def normalize_point(self, point: Union[Point, np.ndarray, List[Union[int, float]], List[float]], epsilon: float = 1e-12) -> Point:
         """
         Reduce a point (integer, rational, or float) modulo the lattice into the 
@@ -160,30 +226,8 @@ class Lattice:
             p = x_sym - A_sym * t
             
             # Convert to appropriate type (preserve int vs float)
-            result = []
             original_is_int = all(isinstance(x[i], (int, np.integer)) for i in range(len(x)))
-            
-            for i in range(n):
-                val = p[i]
-                if val.is_Integer:
-                    result.append(int(val))
-                elif val.is_Rational:
-                    # Try to convert to int if it's close enough
-                    float_val = float(val)
-                    int_val = int(round(float_val))
-                    if abs(float_val - int_val) < epsilon:
-                        result.append(int_val)
-                    else:
-                        result.append(float_val)
-                else:
-                    result.append(float(val))
-            
-            # If original input was all integers, try to keep result as integers
-            if original_is_int:
-                # Check if all results are close to integers
-                all_close_to_int = all(abs(r - round(r)) < epsilon for r in result)
-                if all_close_to_int:
-                    result = [int(round(r)) for r in result]
+            result = self._convert_to_appropriate_type(p, original_is_int, epsilon)
             
             # After rounding to integers, normalize again to ensure we're in [0, basis_element)
             # This handles cases where rounding puts us on the boundary
@@ -213,41 +257,8 @@ class Lattice:
             
             xf = [to_fraction(v) for v in x]
             
-            # Invert A over Q with Fractions (Gauss-Jordan)
-            def invert_matrix_fraction(M):
-                m = [[Fraction(int(v)) for v in row] for row in M]
-                n = len(m)
-                I = [[Fraction(int(i == j)) for j in range(n)] for i in range(n)]
-                for col in range(n):
-                    piv = col
-                    while piv < n and m[piv][col] == 0:
-                        piv += 1
-                    if piv == n:
-                        raise ValueError("Lattice vectors must be linearly independent")
-                    if piv != col:
-                        m[col], m[piv] = m[piv], m[col]
-                        I[col], I[piv] = I[piv], I[col]
-                    pv = m[col][col]
-                    invpv = Fraction(1, 1) / pv
-                    for j in range(n):
-                        m[col][j] *= invpv
-                        I[col][j] *= invpv
-                    for r in range(n):
-                        if r == col:
-                            continue
-                        f = m[r][col]
-                        if f == 0:
-                            continue
-                        for j in range(n):
-                            m[r][j] -= f * m[col][j]
-                            I[r][j] -= f * I[col][j]
-                return I
-            
-            def matvec(M, v):
-                return [sum(M[i][j] * v[j] for j in range(n)) for i in range(n)]
-            
-            Ainv = invert_matrix_fraction(A)
-            y = matvec(Ainv, xf)
+            Ainv = self._invert_matrix_fraction(A)
+            y = self._matvec(Ainv, xf)
             
             # epsilon-aware floor for Fractions
             def floor_eps(val, eps=epsilon):
@@ -258,32 +269,14 @@ class Lattice:
             p = [xf[i] - sum(Fraction(int(A[i][j])) * t[j] for j in range(n)) for i in range(n)]
             
             # Convert to appropriate type (preserve int vs float)
-            result = []
             original_is_int = all(isinstance(x[i], (int, np.integer)) for i in range(len(x)))
-            
-            for pi in p:
-                if isinstance(pi, Fraction):
-                    float_val = float(pi)
-                    int_val = int(round(float_val))
-                    if abs(float_val - int_val) < epsilon:
-                        result.append(int_val)
-                    else:
-                        result.append(float_val)
-                else:
-                    result.append(float(pi))
-            
-            # If original input was all integers, try to keep result as integers
-            if original_is_int:
-                # Check if all results are close to integers
-                all_close_to_int = all(abs(r - round(r)) < epsilon for r in result)
-                if all_close_to_int:
-                    result = [int(round(r)) for r in result]
+            result = self._convert_to_appropriate_type(p, original_is_int, epsilon)
             
             # After rounding to integers, normalize again to ensure we're in the fundamental domain
             result_point = Point(result)
             
             # Check if we need to normalize again
-            y_check = matvec(Ainv, result)
+            y_check = self._matvec(Ainv, result)
             needs_renormalization = any(float(y_check[i]) < -epsilon or float(y_check[i]) >= 1 - epsilon for i in range(n))
             
             if needs_renormalization:
@@ -428,46 +421,7 @@ class Lattice:
         except Exception:
             # Fallback (no sympy): enumerate x in [0,detA-1]^n and fold into P(A).
             # Implement exact inverse via Fractions (Gauss-Jordan).
-            def invert_matrix_fraction(M):
-                A = [[Fraction(x) for x in row] for row in M]
-                n = len(A)
-                I = [[Fraction(int(i == j)) for j in range(n)] for i in range(n)]
-                # Gauss-Jordan
-                for col in range(n):
-                    # find pivot
-                    piv = col
-                    while piv < n and A[piv][col] == 0:
-                        piv += 1
-                    if piv == n:
-                        raise ValueError("Matrix not invertible.")
-                    if piv != col:
-                        A[col], A[piv] = A[piv], A[col]
-                        I[col], I[piv] = I[piv], I[col]
-                    # normalize
-                    pv = A[col][col]
-                    invpv = Fraction(1, 1) / pv
-                    for j in range(n):
-                        A[col][j] *= invpv
-                        I[col][j] *= invpv
-                    # eliminate others
-                    for r in range(n):
-                        if r == col:
-                            continue
-                        factor = A[r][col]
-                        if factor == 0:
-                            continue
-                        for j in range(n):
-                            A[r][j] -= factor * A[col][j]
-                            I[r][j] -= factor * I[col][j]
-                return I  # A^{-1}
-            
-            def matvec(M, v):
-                return [sum(M[i][j] * v[j] for j in range(n)) for i in range(n)]
-            
-            def matvec_int(M, v):
-                return [sum(M[i][j] * v[j] for j in range(n)) for i in range(n)]
-            
-            Ainv_frac = invert_matrix_fraction(basis)
+            Ainv_frac = self._invert_matrix_fraction(basis)
             
             points_set = set()
             # Helper to floor Fractions componentwise
@@ -476,10 +430,10 @@ class Lattice:
             
             for x in product(range(detA), repeat=n):
                 # y = A^{-1} x
-                y = matvec(Ainv_frac, list(x))
+                y = self._matvec(Ainv_frac, list(x))
                 t = floor_vec(y)
                 # p = x - A t
-                At = matvec_int(basis, t)
+                At = self._matvec_int(basis, t)
                 p = tuple(x[i] - At[i] for i in range(n))
                 points_set.add(p)
                 if len(points_set) == detA:
