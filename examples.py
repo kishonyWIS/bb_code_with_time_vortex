@@ -40,7 +40,7 @@ def toric_code_example(distance: int = 2, rotated: bool = False, basis: str = 'Z
         basis=basis,
         include_observables=True,
         include_detectors=True,
-        p_cx=0.01
+        p_cx=0.001
     )
 
     # Generate Stim circuit
@@ -84,7 +84,7 @@ def bb_code_example(basis: str = 'Z', noisy_cycles: int = 2):
         basis=basis,
         include_observables=True,
         include_detectors=True,
-        p_cx=0.01
+        p_cx=0.001
     )
 
     # Generate Stim circuit

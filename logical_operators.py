@@ -5,9 +5,12 @@ Uses binary field algebra to find logical operators from stabilizer generators.
 
 import numpy as np
 import galois
-from typing import List, Tuple, Dict
+from typing import List, Tuple, Dict, TYPE_CHECKING
 from lattice import Point, Lattice
 from qubit_system import QubitSystem
+
+if TYPE_CHECKING:
+    from gate_order import GateOrder
 
 
 class LogicalOperators:
@@ -16,16 +19,18 @@ class LogicalOperators:
     from its stabilizer generators.
     """
     
-    def __init__(self, qubit_system: QubitSystem, lattice_points: List[Point]):
+    def __init__(self, qubit_system: QubitSystem, lattice_points: List[Point], gate_order: 'GateOrder'):
         """
         Initialize logical operator computer.
         
         Args:
             qubit_system: Qubit system for getting stabilizer supports
             lattice_points: List of lattice points in the code
+            gate_order: Gate order to determine stabilizer support ordering
         """
         self.qubit_system = qubit_system
         self.lattice_points = lattice_points
+        self.gate_order = gate_order
         
         # Create ordered list of data qubits (L then R for each point)
         self.data_qubits = []
@@ -76,7 +81,7 @@ class LogicalOperators:
         
         for stab_idx, point in enumerate(self.lattice_points):
             # Get X stabilizer support
-            x_support = self.qubit_system.get_x_stabilizer_support(point)
+            x_support = self.qubit_system.get_x_stabilizer_support(point, self.gate_order)
             for qubit_idx, qubit_type in x_support:
                 # Only include data qubits (L and R), not ancillas
                 if self.is_data_qubit.get(qubit_idx, False):
@@ -84,7 +89,7 @@ class LogicalOperators:
                     hx[stab_idx, col_idx] = 1
             
             # Get Z stabilizer support
-            z_support = self.qubit_system.get_z_stabilizer_support(point)
+            z_support = self.qubit_system.get_z_stabilizer_support(point, self.gate_order)
             for qubit_idx, qubit_type in z_support:
                 # Only include data qubits (L and R), not ancillas
                 if self.is_data_qubit.get(qubit_idx, False):

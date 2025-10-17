@@ -4,8 +4,11 @@ Each lattice point hosts four qubits: L, R (data qubits) and X_anc, Z_anc (ancil
 """
 
 import numpy as np
-from typing import Dict, Tuple, List, Union, Optional
+from typing import Dict, Tuple, List, Union, Optional, TYPE_CHECKING
 from lattice import Lattice, Point
+
+if TYPE_CHECKING:
+    from gate_order import GateOrder
 
 
 class QubitSystem:
@@ -146,75 +149,67 @@ class QubitSystem:
         """
         return self._qubit_index_map.copy()
     
-    def get_x_stabilizer_support(self, point: Union[Point, np.ndarray, List[Union[int, float]]]) -> List[Tuple[int, str]]:
+    def get_x_stabilizer_support(self, point: Union[Point, np.ndarray, List[Union[int, float]]], 
+                                gate_order: 'GateOrder') -> List[Tuple[int, str]]:
         """
         Get the qubit indices and types for X stabilizer support at a given point.
         
-        X stabilizer support includes:
-        - On-site: both L and R qubits at the point
-        - Even axes: R qubits at point + positive shift along each axis
-        - Odd axes: L qubits at point + positive shift along each axis
-        
         Args:
             point: Lattice point for the stabilizer
+            gate_order: Gate order to determine qubit ordering
             
         Returns:
-            List of (qubit_index, qubit_type) tuples
+            List of (qubit_index, qubit_type) tuples ordered according to gate_order
         """
         normalized_point = self.lattice.normalize_point(point)
         support = []
         
-        # On-site qubits (both L and R)
-        support.append((self.get_qubit_index(normalized_point, 'L'), 'L'))
-        support.append((self.get_qubit_index(normalized_point, 'R'), 'R'))
-        
-        # Even axes: R qubits with positive shift
-        for axis in range(0, self.lattice.dimension, 2):
-            shift = self.lattice.get_axis_vector(axis)
-            shifted_point = self.lattice.get_shifted_point(normalized_point, shift)
-            support.append((self.get_qubit_index(shifted_point, 'R'), 'R'))
-        
-        # Odd axes: L qubits with positive shift
-        for axis in range(1, self.lattice.dimension, 2):
-            shift = self.lattice.get_axis_vector(axis)
-            shifted_point = self.lattice.get_shifted_point(normalized_point, shift)
-            support.append((self.get_qubit_index(shifted_point, 'L'), 'L'))
+        # Use gate_order to determine ordering
+        for descriptor in gate_order.descriptors:
+            if descriptor.ancilla_type == "X":
+                if descriptor.connection_type.startswith("on_site_"):
+                    qubit_type = descriptor.get_qubit_type_from_connection_type()
+                    support.append((self.get_qubit_index(normalized_point, qubit_type), qubit_type))
+                elif descriptor.connection_type.startswith("axis_"):
+                    axis = descriptor.get_axis_from_connection_type()
+                    data_qubit_label = descriptor.get_data_qubit_label(axis)
+                    shift_direction = descriptor.get_shift_direction(axis)
+                    
+                    shift = shift_direction * self.lattice.get_axis_vector(axis)
+                    shifted_point = self.lattice.get_shifted_point(normalized_point, shift)
+                    support.append((self.get_qubit_index(shifted_point, data_qubit_label), data_qubit_label))
         
         return support
     
-    def get_z_stabilizer_support(self, point: Union[Point, np.ndarray, List[Union[int, float]]]) -> List[Tuple[int, str]]:
+    def get_z_stabilizer_support(self, point: Union[Point, np.ndarray, List[Union[int, float]]], 
+                                gate_order: 'GateOrder') -> List[Tuple[int, str]]:
         """
         Get the qubit indices and types for Z stabilizer support at a given point.
         
-        Z stabilizer support includes:
-        - On-site: both L and R qubits at the point
-        - Even axes: L qubits at point + negative shift along each axis
-        - Odd axes: R qubits at point + negative shift along each axis
-        
         Args:
             point: Lattice point for the stabilizer
+            gate_order: Gate order to determine qubit ordering
             
         Returns:
-            List of (qubit_index, qubit_type) tuples
+            List of (qubit_index, qubit_type) tuples ordered according to gate_order
         """
         normalized_point = self.lattice.normalize_point(point)
         support = []
         
-        # On-site qubits (both L and R)
-        support.append((self.get_qubit_index(normalized_point, 'L'), 'L'))
-        support.append((self.get_qubit_index(normalized_point, 'R'), 'R'))
-        
-        # Even axes: L qubits with negative shift
-        for axis in range(0, self.lattice.dimension, 2):
-            shift = -self.lattice.get_axis_vector(axis)
-            shifted_point = self.lattice.get_shifted_point(normalized_point, shift)
-            support.append((self.get_qubit_index(shifted_point, 'L'), 'L'))
-        
-        # Odd axes: R qubits with negative shift
-        for axis in range(1, self.lattice.dimension, 2):
-            shift = -self.lattice.get_axis_vector(axis)
-            shifted_point = self.lattice.get_shifted_point(normalized_point, shift)
-            support.append((self.get_qubit_index(shifted_point, 'R'), 'R'))
+        # Use gate_order to determine ordering
+        for descriptor in gate_order.descriptors:
+            if descriptor.ancilla_type == "Z":
+                if descriptor.connection_type.startswith("on_site_"):
+                    qubit_type = descriptor.get_qubit_type_from_connection_type()
+                    support.append((self.get_qubit_index(normalized_point, qubit_type), qubit_type))
+                elif descriptor.connection_type.startswith("axis_"):
+                    axis = descriptor.get_axis_from_connection_type()
+                    data_qubit_label = descriptor.get_data_qubit_label(axis)
+                    shift_direction = descriptor.get_shift_direction(axis)
+                    
+                    shift = shift_direction * self.lattice.get_axis_vector(axis)
+                    shifted_point = self.lattice.get_shifted_point(normalized_point, shift)
+                    support.append((self.get_qubit_index(shifted_point, data_qubit_label), data_qubit_label))
         
         return support
 

@@ -61,7 +61,7 @@ class SyndromeCircuit:
         # Compute logical operators if needed
         self.logical_operators: Optional[LogicalOperators] = None
         if include_observables:
-            self.logical_operators = LogicalOperators(qubit_system, lattice_points)
+            self.logical_operators = LogicalOperators(qubit_system, lattice_points, gate_order)
     
     def build_operations(self) -> List[CircuitOperation]:
         """

@@ -41,6 +41,48 @@ class GateDescriptor:
             return None  # Will be determined dynamically
         else:
             raise ValueError(f"Invalid connection type: {self.connection_type}")
+    
+    def get_data_qubit_label(self, axis: int) -> str:
+        """
+        Get the data qubit label (L or R) for a given axis based on stabilizer type.
+        
+        Rules:
+        - X stabilizers: even axes → R, odd axes → L
+        - Z stabilizers: even axes → L, odd axes → R
+        
+        Args:
+            axis: Axis number (0-based)
+            
+        Returns:
+            'L' or 'R'
+        """
+        if self.ancilla_type == "X":
+            return "R" if axis % 2 == 0 else "L"
+        elif self.ancilla_type == "Z":
+            return "L" if axis % 2 == 0 else "R"
+        else:
+            raise ValueError(f"Invalid ancilla type: {self.ancilla_type}")
+    
+    def get_shift_direction(self, axis: int) -> int:
+        """
+        Get the shift direction (+1 or -1) for a given axis based on stabilizer type.
+        
+        Rules:
+        - X stabilizers: positive shift (+1)
+        - Z stabilizers: negative shift (-1)
+        
+        Args:
+            axis: Axis number (0-based, not used for direction but kept for consistency)
+            
+        Returns:
+            +1 for positive shift, -1 for negative shift
+        """
+        if self.ancilla_type == "X":
+            return 1  # positive shift
+        elif self.ancilla_type == "Z":
+            return -1  # negative shift
+        else:
+            raise ValueError(f"Invalid ancilla type: {self.ancilla_type}")
 
 
 class GateOrder:
@@ -134,45 +176,42 @@ class GateOrder:
         
         if descriptor.ancilla_type == "X":
             ancilla_qubit = qubit_system.get_qubit_index(point, "X_anc")
-            support = qubit_system.get_x_stabilizer_support(point)
         else:  # Z
             ancilla_qubit = qubit_system.get_qubit_index(point, "Z_anc")
-            support = qubit_system.get_z_stabilizer_support(point)
         
         if descriptor.connection_type.startswith("on_site_"):
             # On-site connection - only connect to qubits at the current point
             qubit_type = descriptor.get_qubit_type_from_connection_type()
             
             # Get the on-site qubit of the specified type
-            on_site_qubit = qubit_system.get_qubit_index(point, qubit_type)
+            data_qubit = qubit_system.get_qubit_index(point, qubit_type)
             
-            # For X ancillas: control=ancilla, target=data
-            # For Z ancillas: control=data, target=ancilla
-            if descriptor.ancilla_type == "X":
-                operations.append(CX(time, ancilla_qubit, on_site_qubit))
-            else:  # Z
-                operations.append(CX(time, on_site_qubit, ancilla_qubit))
-        
         elif descriptor.connection_type.startswith("axis_"):
-            # Axis connection
+            # Axis connection - use GateDescriptor methods to determine qubit and direction
             axis = descriptor.get_axis_from_connection_type()
             if axis < 0:
                 raise ValueError(f"Invalid axis in connection type: {descriptor.connection_type}")
             
-            # The stabilizer support already contains the correct qubits in the right order
-            # For X stabilizers: [on_site_L, on_site_R, axis_0_R, axis_1_L, axis_2_R, axis_3_L, ...]
-            # For Z stabilizers: [on_site_L, on_site_R, axis_0_L, axis_1_R, axis_2_L, axis_3_R, ...]
+            # Get the data qubit label and shift direction from the descriptor
+            data_qubit_label = descriptor.get_data_qubit_label(axis)
+            shift_direction = descriptor.get_shift_direction(axis)
             
-            # Calculate the index in the support list
-            # On-site qubits are at indices 0 and 1
-            # Axis qubits start at index 2
-            support_index = 2 + axis
+            # Calculate the shifted point
+            shift = shift_direction * qubit_system.lattice.get_axis_vector(axis)
+            shifted_point = qubit_system.lattice.get_shifted_point(point, shift)
             
-            if support_index < len(support):
-                qubit_idx, qtype = support[support_index]
-                if descriptor.ancilla_type == "X":
-                    operations.append(CX(time, ancilla_qubit, qubit_idx))
-                else:  # Z
-                    operations.append(CX(time, qubit_idx, ancilla_qubit))
+            # Get the data qubit at the shifted point
+            data_qubit = qubit_system.get_qubit_index(shifted_point, data_qubit_label)
+        
+        else:
+            raise ValueError(f"Invalid connection type: {descriptor.connection_type}")
+        
+        # Create CX gate with consistent direction logic
+        # For X ancillas: control=ancilla, target=data
+        # For Z ancillas: control=data, target=ancilla
+        if descriptor.ancilla_type == "X":
+            operations.append(CX(time, ancilla_qubit, data_qubit))
+        else:  # Z
+            operations.append(CX(time, data_qubit, ancilla_qubit))
         
         return operations
