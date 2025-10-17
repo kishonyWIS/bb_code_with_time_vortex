@@ -100,5 +100,5 @@ def bb_code_example(basis: str = 'Z', noisy_cycles: int = 2):
     print(f'Minimal found error: {len(minimal_found_error)}')
 
 if __name__ == "__main__":
-    # toric_code_example(distance=2, rotated=True, basis='Z')
-    bb_code_example(basis='Z', noisy_cycles=1)
+    toric_code_example(distance=2, rotated=True, basis='Z')
+    # bb_code_example(basis='Z', noisy_cycles=1)

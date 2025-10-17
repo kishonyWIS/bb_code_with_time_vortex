@@ -149,6 +149,31 @@ class QubitSystem:
         """
         return self._qubit_index_map.copy()
     
+    def _get_stabilizer_support(self, point: Union[Point, np.ndarray, List[Union[int, float]]], 
+                               gate_order: 'GateOrder', ancilla_type: str) -> List[Tuple[int, str]]:
+        """
+        Unified method to get stabilizer support for either X or Z ancillas.
+        
+        Args:
+            point: Lattice point for the stabilizer
+            gate_order: Gate order to determine qubit ordering
+            ancilla_type: "X" or "Z" to filter descriptors
+            
+        Returns:
+            List of (qubit_index, qubit_type) tuples ordered according to gate_order
+        """
+        normalized_point = self.lattice.normalize_point(point)
+        support = []
+        
+        # Use gate_order to determine ordering
+        for descriptor in gate_order.descriptors:
+            if descriptor.ancilla_type == ancilla_type:
+                # Get the connected data qubit using the centralized method
+                qubit_index, qubit_label = descriptor.get_connected_data_qubit(self, normalized_point)
+                support.append((qubit_index, qubit_label))
+        
+        return support
+    
     def get_x_stabilizer_support(self, point: Union[Point, np.ndarray, List[Union[int, float]]], 
                                 gate_order: 'GateOrder') -> List[Tuple[int, str]]:
         """
@@ -161,25 +186,7 @@ class QubitSystem:
         Returns:
             List of (qubit_index, qubit_type) tuples ordered according to gate_order
         """
-        normalized_point = self.lattice.normalize_point(point)
-        support = []
-        
-        # Use gate_order to determine ordering
-        for descriptor in gate_order.descriptors:
-            if descriptor.ancilla_type == "X":
-                if descriptor.connection_type.startswith("on_site_"):
-                    qubit_type = descriptor.get_qubit_type_from_connection_type()
-                    support.append((self.get_qubit_index(normalized_point, qubit_type), qubit_type))
-                elif descriptor.connection_type.startswith("axis_"):
-                    axis = descriptor.get_axis_from_connection_type()
-                    data_qubit_label = descriptor.get_data_qubit_label(axis)
-                    shift_direction = descriptor.get_shift_direction(axis)
-                    
-                    shift = shift_direction * self.lattice.get_axis_vector(axis)
-                    shifted_point = self.lattice.get_shifted_point(normalized_point, shift)
-                    support.append((self.get_qubit_index(shifted_point, data_qubit_label), data_qubit_label))
-        
-        return support
+        return self._get_stabilizer_support(point, gate_order, "X")
     
     def get_z_stabilizer_support(self, point: Union[Point, np.ndarray, List[Union[int, float]]], 
                                 gate_order: 'GateOrder') -> List[Tuple[int, str]]:
@@ -193,25 +200,7 @@ class QubitSystem:
         Returns:
             List of (qubit_index, qubit_type) tuples ordered according to gate_order
         """
-        normalized_point = self.lattice.normalize_point(point)
-        support = []
-        
-        # Use gate_order to determine ordering
-        for descriptor in gate_order.descriptors:
-            if descriptor.ancilla_type == "Z":
-                if descriptor.connection_type.startswith("on_site_"):
-                    qubit_type = descriptor.get_qubit_type_from_connection_type()
-                    support.append((self.get_qubit_index(normalized_point, qubit_type), qubit_type))
-                elif descriptor.connection_type.startswith("axis_"):
-                    axis = descriptor.get_axis_from_connection_type()
-                    data_qubit_label = descriptor.get_data_qubit_label(axis)
-                    shift_direction = descriptor.get_shift_direction(axis)
-                    
-                    shift = shift_direction * self.lattice.get_axis_vector(axis)
-                    shifted_point = self.lattice.get_shifted_point(normalized_point, shift)
-                    support.append((self.get_qubit_index(shifted_point, data_qubit_label), data_qubit_label))
-        
-        return support
+        return self._get_stabilizer_support(point, gate_order, "Z")
 
     def __repr__(self) -> str:
         """String representation."""
