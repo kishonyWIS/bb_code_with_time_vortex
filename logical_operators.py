@@ -60,8 +60,6 @@ class LogicalOperators:
         
         # Compute logical operators
         self.logical_x_ops, self.logical_z_ops = self._compute_logical_operators()
-        print('logical_x_ops: ', self.logical_x_ops)
-        print('logical_z_ops: ', self.logical_z_ops)
     
     def _build_parity_check_matrices(self) -> Tuple[np.ndarray, np.ndarray]:
         """

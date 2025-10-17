@@ -112,7 +112,8 @@ def bb_code_example(basis: str = 'Z', noisy_cycles: int = 2):
 def decode_with_tesseract_example(circuit_type: str = 'toric', distance: int = 2, 
                                  shots: int = 10000, p_cx: float = 0.001, 
                                  basis: str = 'Z', noisy_cycles: int = None,
-                                 num_workers: int = 4):
+                                 num_workers: int = 4,
+                                 max_errors: int = 100):
     """
     Example demonstrating Tesseract decoder integration for computing logical error rates.
     
@@ -124,6 +125,7 @@ def decode_with_tesseract_example(circuit_type: str = 'toric', distance: int = 2
         basis: Measurement basis ('Z' or 'X')
         noisy_cycles: Number of noisy cycles (None for auto)
         num_workers: Number of parallel workers for Sinter
+        max_errors: Maximum number of errors to explore
     """
     print(f"\n=== Tesseract Decoder Integration Example ===")
     print(f"Circuit type: {circuit_type}")
@@ -199,6 +201,7 @@ def decode_with_tesseract_example(circuit_type: str = 'toric', distance: int = 2
             tasks=[sinter.Task(circuit=stim_circuit)],
             decoders=["tesseract"],
             max_shots=shots,
+            max_errors=max_errors,
             custom_decoders=get_tesseract_decoder_for_sinter(),
         )
     else:
@@ -209,6 +212,7 @@ def decode_with_tesseract_example(circuit_type: str = 'toric', distance: int = 2
             tasks=[sinter.Task(circuit=stim_circuit)],
             decoders=["pymatching"],
             max_shots=shots,
+            max_errors=max_errors,
         )
     
     # Display results
@@ -218,45 +222,44 @@ def decode_with_tesseract_example(circuit_type: str = 'toric', distance: int = 2
     print(f"Logical error rate: {results.errors / results.shots:.6f}")
 
 
-def plot_toric_threshold_curve(distances: list = [3, 5, 7], 
-                              p_cx_range: tuple = (0.001, 0.02), 
-                              num_points: int = 8,
+def plot_toric_threshold_curve(distances: list = [3, 5, 7],
+                              p_cx_values: list = [0.001, 0.002, 0.003, 0.004, 0.005, 0.006, 0.007, 0.008], 
                               shots_per_point: int = 1000,
                               num_workers: int = 4,
-                              basis: str = 'Z'):
+                              basis: str = 'Z',
+                              rotated: bool = False):
     """
     Plot logical error rate vs p_cx for different toric code distances.
     
     Args:
         distances: List of toric code distances to test
-        p_cx_range: Tuple of (min_p_cx, max_p_cx) for the error rate range
-        num_points: Number of p_cx values to test
+        p_cx_values: List of p_cx values to test
         shots_per_point: Number of shots for each data point
         num_workers: Number of parallel workers for Sinter
         basis: Measurement basis ('Z' or 'X')
+        rotated: Whether to use a rotated toric code
     """
     print(f"\n=== Toric Code Threshold Curve Analysis ===")
     print(f"Distances: {distances}")
-    print(f"p_cx range: {p_cx_range}")
-    print(f"Points per curve: {num_points}")
+    print(f"p_cx values: {p_cx_values}")
     print(f"Shots per point: {shots_per_point}")
-    
-    # Generate p_cx values
-    p_cx_values = np.logspace(np.log10(p_cx_range[0]), np.log10(p_cx_range[1]), num_points)
+    print(f"Rotated: {rotated}")
     
     # Store results for each distance
     results_by_distance = {}
+    error_bars_by_distance = {}
     
     for distance in distances:
         print(f"\n--- Testing distance {distance} ---")
         logical_error_rates = []
+        error_bars = []
         
         for i, p_cx in enumerate(p_cx_values):
-            print(f"  Point {i+1}/{num_points}: p_cx = {p_cx:.6f}")
+            print(f"  Point {i+1}/{len(p_cx_values)}: p_cx = {p_cx:.6f}")
             
             try:
                 # Create toric circuit for this distance
-                lattice_vectors = [[distance, 0], [0, distance]]
+                lattice_vectors = [[distance, 0], [0, distance]] if not rotated else [[distance, -distance], [distance, distance]]
                 lattice = Lattice(lattice_vectors)
                 qubit_system = QubitSystem(lattice)
                 lattice_points = lattice.get_all_lattice_points()
@@ -290,6 +293,7 @@ def plot_toric_threshold_curve(distances: list = [3, 5, 7],
                         tasks=[sinter.Task(circuit=stim_circuit)],
                         decoders=["tesseract"],
                         max_shots=shots_per_point,
+                        max_errors=100,
                         custom_decoders=get_tesseract_decoder_for_sinter(),
                     )
                 else:
@@ -299,19 +303,40 @@ def plot_toric_threshold_curve(distances: list = [3, 5, 7],
                         tasks=[sinter.Task(circuit=stim_circuit)],
                         decoders=["pymatching"],
                         max_shots=shots_per_point,
+                        max_errors=100,
                     )
                 
-                # Calculate logical error rate
+                # Calculate logical error rate and error bar (binomial confidence interval)
                 logical_error_rate = results.errors / results.shots
                 logical_error_rates.append(logical_error_rate)
                 
-                print(f"    Logical error rate: {logical_error_rate:.6f}")
+                # Calculate 95% confidence interval using Wilson score interval
+                n = results.shots
+                k = results.errors
+                if n > 0:
+                    p = k / n
+                    z = 1.96  # 95% confidence interval
+                    # Wilson score interval
+                    denominator = 1 + z**2 / n
+                    centre_adjusted_probability = (p + z**2 / (2*n)) / denominator
+                    adjusted_standard_deviation = np.sqrt((p * (1 - p) + z**2 / (4*n)) / n) / denominator
+                    lower_bound = max(0, centre_adjusted_probability - z * adjusted_standard_deviation)
+                    upper_bound = min(1, centre_adjusted_probability + z * adjusted_standard_deviation)
+                    error_bar = max(logical_error_rate - lower_bound, upper_bound - logical_error_rate)
+                else:
+                    error_bar = 0
+                
+                error_bars.append(error_bar)
+                
+                print(f"    Logical error rate: {logical_error_rate:.6f} ± {error_bar:.6f}")
                 
             except Exception as e:
                 print(f"    Error at p_cx={p_cx:.6f}: {e}")
                 logical_error_rates.append(np.nan)
+                error_bars.append(np.nan)
         
         results_by_distance[distance] = logical_error_rates
+        error_bars_by_distance[distance] = error_bars
     
     # Create the plot
     plt.figure(figsize=(10, 7))
@@ -320,8 +345,15 @@ def plot_toric_threshold_curve(distances: list = [3, 5, 7],
     
     for i, distance in enumerate(distances):
         color = colors[i % len(colors)]
-        plt.semilogy(p_cx_values, results_by_distance[distance], 
-                    'o-', color=color, linewidth=2, markersize=6,
+        # Filter out NaN values for plotting
+        valid_indices = ~np.isnan(results_by_distance[distance])
+        valid_p_cx = np.array(p_cx_values)[valid_indices]
+        valid_rates = np.array(results_by_distance[distance])[valid_indices]
+        valid_errors = np.array(error_bars_by_distance[distance])[valid_indices]
+        
+        plt.errorbar(valid_p_cx, valid_rates, yerr=valid_errors,
+                    fmt='o-', color=color, linewidth=2, markersize=6,
+                    capsize=5, capthick=2, elinewidth=2,
                     label=f'd = {distance}')
     
     plt.xlabel('Physical Error Rate (p_cx)', fontsize=12)
@@ -329,9 +361,8 @@ def plot_toric_threshold_curve(distances: list = [3, 5, 7],
     plt.title('Toric Code Threshold Curve\nLogical Error Rate vs Physical Error Rate', fontsize=14)
     plt.grid(True, alpha=0.3)
     plt.legend(fontsize=11)
-    
-    # Add threshold line at p_cx = 0.01 (approximate toric code threshold)
-    plt.axvline(x=0.01, color='black', linestyle='--', alpha=0.7, label='Threshold ~0.01')
+    plt.xscale('log')
+    plt.yscale('log')
     
     plt.tight_layout()
     plt.show()
@@ -342,7 +373,146 @@ def plot_toric_threshold_curve(distances: list = [3, 5, 7],
         print(f"Distance {distance}:")
         for i, p_cx in enumerate(p_cx_values):
             if not np.isnan(results_by_distance[distance][i]):
-                print(f"  p_cx = {p_cx:.6f}: Logical error rate = {results_by_distance[distance][i]:.6f}")
+                error_bar = error_bars_by_distance[distance][i]
+                print(f"  p_cx = {p_cx:.6f}: Logical error rate = {results_by_distance[distance][i]:.6f} ± {error_bar:.6f}")
+
+
+def plot_bb_threshold_curve(p_cx_values: list = [0.001, 0.002, 0.003, 0.004], 
+                           shots_per_point: int = 1000,
+                           num_workers: int = 4,
+                           basis: str = 'Z',
+                           noisy_cycles: int = 2,
+                           max_errors: int = 100):
+    """
+    Plot logical error rate vs p_cx for BB.
+    
+    Args:
+        p_cx_values: List of p_cx values to test
+        shots_per_point: Number of shots for each data point
+        num_workers: Number of parallel workers for Sinter
+        basis: Measurement basis ('Z' or 'X')
+        noisy_cycles: Number of noisy cycles for BB code
+    """
+    print(f"\n=== BB Code Threshold Curve Analysis ===")
+    print(f"p_cx values: {p_cx_values}")
+    print(f"Shots per point: {shots_per_point}")
+    print(f"Noisy cycles: {noisy_cycles}")
+    
+    # Store results
+    logical_error_rates = []
+    error_bars = []
+    
+    print(f"\n--- Testing BB Code ---")
+    
+    for i, p_cx in enumerate(p_cx_values):
+        print(f"  Point {i+1}/{len(p_cx_values)}: p_cx = {p_cx:.6f}")
+        
+        try:
+            # Create BB circuit
+            lattice_vectors = [[12,0,0,0], [0, 6, 0, 0], [1, 3, 1, 0], [-3, -2, 0, 1]]
+            lattice = Lattice(lattice_vectors)
+            qubit_system = QubitSystem(lattice)
+            lattice_points = lattice.get_all_lattice_points()
+            gate_order = GateOrder.get_default_order(lattice.dimension)
+            
+            # Create circuit with detectors and observables
+            circuit = SyndromeCircuit(
+                qubit_system, lattice_points, gate_order,
+                num_noisy_cycles=noisy_cycles,
+                basis=basis,
+                include_observables=True,
+                include_detectors=True,
+                p_cx=p_cx
+            )
+            
+            # Generate Stim circuit
+            stim_circuit = circuit.to_stim_circuit()
+            
+            # Run decoding
+            if TESSERACT_AVAILABLE:
+                # Create Sinter-compatible Tesseract decoder
+                def get_tesseract_decoder_for_sinter():
+                    return {"tesseract": tesseract_sinter.TesseractSinterDecoder()}
+                
+                results, = sinter.collect(
+                    num_workers=num_workers,
+                    tasks=[sinter.Task(circuit=stim_circuit)],
+                    decoders=["tesseract"],
+                    max_shots=shots_per_point,
+                    custom_decoders=get_tesseract_decoder_for_sinter(),
+                    max_errors=max_errors,
+                )
+            else:
+                # Fallback to built-in decoders
+                results, = sinter.collect(
+                    num_workers=num_workers,
+                    tasks=[sinter.Task(circuit=stim_circuit)],
+                    decoders=["pymatching"],
+                    max_shots=shots_per_point,
+                    max_errors=max_errors,
+                )
+            
+            # Calculate logical error rate and error bar (binomial confidence interval)
+            logical_error_rate = results.errors / results.shots
+            logical_error_rates.append(logical_error_rate)
+            
+            # Calculate 95% confidence interval using Wilson score interval
+            n = results.shots
+            k = results.errors
+            if n > 0:
+                p = k / n
+                z = 1.96  # 95% confidence interval
+                # Wilson score interval
+                denominator = 1 + z**2 / n
+                centre_adjusted_probability = (p + z**2 / (2*n)) / denominator
+                adjusted_standard_deviation = np.sqrt((p * (1 - p) + z**2 / (4*n)) / n) / denominator
+                lower_bound = max(0, centre_adjusted_probability - z * adjusted_standard_deviation)
+                upper_bound = min(1, centre_adjusted_probability + z * adjusted_standard_deviation)
+                error_bar = max(logical_error_rate - lower_bound, upper_bound - logical_error_rate)
+            else:
+                error_bar = 0
+            
+            error_bars.append(error_bar)
+            
+            print(f"    Logical error rate: {logical_error_rate:.6f} ± {error_bar:.6f}")
+            
+        except Exception as e:
+            print(f"    Error at p_cx={p_cx:.6f}: {e}")
+            logical_error_rates.append(np.nan)
+            error_bars.append(np.nan)
+    
+    # Create the plot
+    plt.figure(figsize=(10, 7))
+    
+    # Filter out NaN values for plotting
+    valid_indices = ~np.isnan(logical_error_rates)
+    valid_p_cx = np.array(p_cx_values)[valid_indices]
+    valid_rates = np.array(logical_error_rates)[valid_indices]
+    valid_errors = np.array(error_bars)[valid_indices]
+    
+    plt.errorbar(valid_p_cx, valid_rates, yerr=valid_errors,
+                fmt='o-', color='purple', linewidth=2, markersize=6,
+                capsize=5, capthick=2, elinewidth=2,
+                label='BB Code')
+    
+    plt.xlabel('Physical Error Rate (p_cx)', fontsize=12)
+    plt.ylabel('Logical Error Rate', fontsize=12)
+    plt.title('BB Code Threshold Curve\nLogical Error Rate vs Physical Error Rate', fontsize=14)
+    plt.grid(True, alpha=0.3)
+    plt.legend(fontsize=11)
+    plt.xscale('log')
+    plt.yscale('log')
+    
+    plt.tight_layout()
+    plt.show()
+    
+    # Print summary
+    print(f"\n=== Summary ===")
+    print(f"BB Code:")
+    for i, p_cx in enumerate(p_cx_values):
+        if not np.isnan(logical_error_rates[i]):
+            error_bar = error_bars[i]
+            print(f"  p_cx = {p_cx:.6f}: Logical error rate = {logical_error_rates[i]:.6f} ± {error_bar:.6f}")
 
 
 if __name__ == "__main__":
@@ -354,5 +524,9 @@ if __name__ == "__main__":
     # decode_with_tesseract_example(circuit_type='bb', shots=1000, p_cx=0.001)
     
     # Plot threshold curve for toric code
-    plot_toric_threshold_curve(distances=[3, 5], p_cx_range=(0.001, 0.015), 
-                              num_points=6, shots_per_point=10000)
+    plot_toric_threshold_curve(distances=[3, 5], p_cx_values=[0.001, 0.002, 0.003, 0.004, 0.005, 0.006, 0.007, 0.008], 
+                              shots_per_point=10000, num_workers=10)
+    
+    # # Plot threshold curve for BB code
+    # plot_bb_threshold_curve(p_cx_values=[0.005,0.006,0.007,0.008], 
+    #                        shots_per_point=10000, num_workers=10)
