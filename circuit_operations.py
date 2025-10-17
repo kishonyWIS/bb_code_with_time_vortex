@@ -3,8 +3,9 @@ Circuit operation classes for building syndrome extraction circuits with time or
 """
 
 from abc import ABC, abstractmethod
-from typing import List, Union, Tuple
+from typing import List, Union, Tuple, Optional
 from dataclasses import dataclass
+import numpy as np
 
 
 @dataclass
@@ -32,6 +33,7 @@ class Reset(CircuitOperation):
     """
     qubit: int
     basis: str  # 'X' or 'Z'
+    position: Optional[np.ndarray] = None
     
     def to_stim(self) -> str:
         """Convert to Stim reset instruction."""
@@ -54,6 +56,7 @@ class Measure(CircuitOperation):
     """
     qubit: int
     basis: str  # 'X' or 'Z'
+    position: Optional[np.ndarray] = None
     
     def to_stim(self) -> str:
         """Convert to Stim measurement instruction."""
@@ -76,6 +79,7 @@ class CX(CircuitOperation):
     """
     control: int
     target: int
+    position: Optional[np.ndarray] = None
     
     def to_stim(self) -> str:
         """Convert to Stim CX instruction."""
@@ -94,6 +98,7 @@ class Depolarize2(CircuitOperation):
     qubit1: int
     qubit2: int
     probability: float
+    position: Optional[np.ndarray] = None
     
     def to_stim(self) -> str:
         """Convert to Stim DEPOLARIZE2 instruction."""
@@ -112,6 +117,7 @@ class Detector(CircuitOperation):
     qubit: int
     previous_measurement_index: int  # Index of previous measurement (for rec[-k])
     current_measurement_index: int   # Index of current measurement (for rec[-k])
+    position: Optional[np.ndarray] = None
     
     def to_stim(self) -> str:
         """Convert to Stim DETECTOR instruction."""
@@ -129,6 +135,7 @@ class Observable(CircuitOperation):
     """
     observable_id: int  # Numeric ID for the observable
     measurement_indices: List[int]  # Indices for rec[-k] references
+    position: Optional[np.ndarray] = None
     
     def to_stim(self) -> str:
         """Convert to Stim OBSERVABLE_INCLUDE instruction."""
@@ -145,6 +152,7 @@ class Tick(CircuitOperation):
     """
     TICK instruction for time separation in Stim.
     """
+    position: Optional[np.ndarray] = None
     
     def to_stim(self) -> str:
         """Convert to Stim TICK instruction."""

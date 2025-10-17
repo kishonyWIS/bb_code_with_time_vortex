@@ -438,6 +438,109 @@ class Lattice:
         
         return points
     
+    def compute_periodic_mean(self, points: List['Point']) -> 'Point':
+        """
+        Compute the mean of points with proper handling of periodic boundary conditions.
+        
+        For points that are close across boundaries (e.g., 0.1L and 0.9L in 1D),
+        this finds the tightest clustering by shifting points by lattice vectors
+        before computing the mean.
+        
+        Args:
+            points: List of points to average
+            
+        Returns:
+            Mean point in the fundamental domain
+        """
+        if not points:
+            raise ValueError("Cannot compute mean of empty point list")
+        
+        if len(points) == 1:
+            return points[0]
+        
+        # Convert all points to lattice basis coordinates
+        coords_list = []
+        for point in points:
+            if isinstance(point, Point):
+                coords = point.coords
+            else:
+                coords = np.array(point)
+            # Convert to lattice basis: coords = A^{-1} * point
+            lattice_coords = self.lattice_matrix_inv @ coords
+            coords_list.append(lattice_coords)
+        
+        # For each dimension, find the tightest clustering
+        result_coords = []
+        for dim in range(self.dimension):
+            values = [coords[dim] for coords in coords_list]
+            best_mean = self._minimize_spread_and_mean(values)
+            result_coords.append(best_mean)
+        
+        # Convert back to real space coordinates
+        mean_coords = self.lattice_matrix @ np.array(result_coords)
+        return self.normalize_point(mean_coords)
+    
+    def _minimize_spread_and_mean(self, values: List[float]) -> float:
+        """
+        Find the mean of values that minimizes spread when considering periodic wraparound.
+        
+        For each value, try shifting it by integer amounts and find the configuration
+        with minimum spread, then compute the mean.
+        
+        Args:
+            values: List of values in [0, 1) (lattice basis coordinates)
+            
+        Returns:
+            Mean value in [0, 1)
+        """
+        if len(values) == 1:
+            return values[0] % 1.0
+        
+        # Try all possible shifts for each value
+        min_spread = float('inf')
+        best_mean = 0.0
+        
+        # For small lists, try all combinations
+        if len(values) <= 4:
+            # Generate all possible shift combinations
+            shift_ranges = [range(-2, 3) for _ in values]  # Try shifts -2, -1, 0, 1, 2
+            
+            for shifts in product(*shift_ranges):
+                shifted_values = [(values[i] + shifts[i]) % 1.0 for i in range(len(values))]
+                
+                # Compute spread (max - min)
+                spread = max(shifted_values) - min(shifted_values)
+                
+                if spread < min_spread:
+                    min_spread = spread
+                    best_mean = sum(shifted_values) / len(shifted_values)
+        else:
+            # For larger lists, use a more efficient approach
+            # Start with no shifts and iteratively improve
+            current_values = [v % 1.0 for v in values]
+            improved = True
+            
+            while improved:
+                improved = False
+                current_mean = sum(current_values) / len(current_values)
+                current_spread = max(current_values) - min(current_values)
+                
+                # Try shifting each value by ±1
+                for i in range(len(current_values)):
+                    for shift in [-1, 1]:
+                        test_values = current_values.copy()
+                        test_values[i] = (test_values[i] + shift) % 1.0
+                        
+                        test_spread = max(test_values) - min(test_values)
+                        if test_spread < current_spread:
+                            current_values = test_values
+                            improved = True
+                            break
+                    if improved:
+                        break
+        
+        return best_mean % 1.0
+    
     def __repr__(self) -> str:
         """String representation."""
         return f"Lattice(dimension={self.dimension}, vectors={self.lattice_vectors.tolist()})"

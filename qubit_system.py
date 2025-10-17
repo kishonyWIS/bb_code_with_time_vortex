@@ -149,6 +149,21 @@ class QubitSystem:
         """
         return self._qubit_index_map.copy()
     
+    def get_qubit_position(self, qubit_index: int) -> Optional[Point]:
+        """
+        Get the lattice position of a qubit by its index.
+        
+        Args:
+            qubit_index: The qubit index to look up
+            
+        Returns:
+            The lattice point where this qubit is located, or None if not found
+        """
+        for (point, label), idx in self._qubit_index_map.items():
+            if idx == qubit_index:
+                return point
+        return None
+    
     def _get_stabilizer_support(self, point: Union[Point, np.ndarray, List[Union[int, float]]], 
                                gate_order: 'GateOrder', ancilla_type: str) -> List[Tuple[int, str]]:
         """

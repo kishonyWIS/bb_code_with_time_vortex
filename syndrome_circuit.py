@@ -21,7 +21,7 @@ class SyndromeCircuit:
                  gate_order: GateOrder, num_cycles: int = None, 
                  num_noisy_cycles: int = 0, p_cx: float = 0.0,
                  basis: str = 'Z', include_observables: bool = True, 
-                 include_detectors: bool = True):
+                 include_detectors: bool = True, vortex_counts: Optional[List[int]] = None):
         """
         Initialize syndrome circuit builder.
         
@@ -35,6 +35,7 @@ class SyndromeCircuit:
             basis: Basis for data qubit measurements ('Z' or 'X')
             include_observables: Whether to include observable instructions
             include_detectors: Whether to include detector instructions
+            vortex_counts: List of vortex counts per lattice vector (length = lattice.dimension)
         """
         self.qubit_system = qubit_system
         self.lattice_points = lattice_points
@@ -42,6 +43,12 @@ class SyndromeCircuit:
         self.basis = basis
         self.include_observables = include_observables
         self.include_detectors = include_detectors
+        
+        # Validate vortex_counts
+        if vortex_counts is not None:
+            if len(vortex_counts) != qubit_system.lattice.dimension:
+                raise ValueError(f"vortex_counts length {len(vortex_counts)} must equal lattice dimension {qubit_system.lattice.dimension}")
+        self.vortex_counts = vortex_counts
         
         # Handle backwards compatibility
         if num_cycles is not None and num_noisy_cycles == 0:
@@ -67,6 +74,11 @@ class SyndromeCircuit:
         """
         Build the complete list of circuit operations for syndrome extraction.
         
+        Uses new timing scheme where each cycle has duration 1.0:
+        - Total steps per cycle: s = len(gate_order.descriptors) + 2
+        - Time step size: dt = 1.0 / s
+        - Cycle i: reset at i, CX gates at i + k*dt, measurements at i + (s-1)*dt
+        
         For noisy circuits:
         - First cycle (0): noise-free
         - Middle cycles (1 to num_noisy_cycles): noisy
@@ -78,15 +90,18 @@ class SyndromeCircuit:
             List of all circuit operations in time order
         """
         self._operations = []
-        current_time = 0.0
+        
+        # Calculate timing parameters
+        num_cx_layers = len(self.gate_order.descriptors)
+        steps_per_cycle = num_cx_layers + 2  # reset + CX gates + measurements
+        dt = 1.0 / steps_per_cycle
         
         # Optional: Add initial state preparation for X-basis measurement
         if self.basis == 'X':
-            self._add_initial_state_preparation(current_time)
-            current_time += 1.0
+            self._add_initial_state_preparation(0.0)
         
         for cycle in range(self.num_cycles):
-            cycle_start_time = current_time
+            cycle_start_time = float(cycle)
             
             # Determine if this cycle should be noisy
             is_noisy = False
@@ -96,49 +111,48 @@ class SyndromeCircuit:
                 # Middle cycles are noisy
                 is_noisy = (cycle > 0 and cycle < self.num_cycles - 1)
             
-            # Reset all ancillas
+            # Reset all ancillas at cycle start
             self._add_reset_operations(cycle_start_time)
-            current_time += 1.0
             
-            # Apply CX gates according to gate order
-            cx_operations = self.gate_order.to_operations(
-                self.qubit_system, self.lattice_points, current_time
-            )
-            self._operations.extend(cx_operations)
+            # Apply CX gates with proper timing
+            for cx_step in range(num_cx_layers):
+                cx_time = cycle_start_time + (cx_step + 1) * dt
+                cx_operations = self.gate_order.to_operations(
+                    self.qubit_system, self.lattice_points, cx_time
+                )
+                self._operations.extend(cx_operations)
+                
+                # Add noise after CX gates if this is a noisy cycle
+                if is_noisy:
+                    noise_time = cx_time + 1e-9  # Small epsilon after CX gate
+                    for cx_op in cx_operations:
+                        noise_op = Depolarize2(noise_time, cx_op.control, cx_op.target, self.p_cx)
+                        self._operations.append(noise_op)
             
-            # Add noise after CX gates if this is a noisy cycle
-            if is_noisy:
-                for cx_op in cx_operations:
-                    noise_op = Depolarize2(cx_op.time, cx_op.control, cx_op.target, self.p_cx)
-                    self._operations.append(noise_op)
-            
-            # Update time to after all CX gates
-            if cx_operations:
-                current_time = max(op.time for op in cx_operations) + 1.0
-            else:
-                current_time += 1.0
-            
-            # Measure all ancillas
-            self._add_measure_operations(current_time)
-            current_time += 1.0
-            
-            # Add TICK instruction between cycles (except after last cycle)
-            if cycle < self.num_cycles - 1:
-                self._operations.append(Tick(current_time))
-                current_time += 1.0
+            # Measure all ancillas at end of cycle
+            measure_time = cycle_start_time + (steps_per_cycle - 1) * dt
+            self._add_measure_operations(measure_time)
         
         # Add detectors after last cycle but before final measurements
         if self.include_detectors:
-            self._add_detectors_after_circuit(current_time)
-            current_time += 1.0
+            detector_time = float(self.num_cycles)
+            self._add_detectors_after_circuit(detector_time)
         
         # Add final data qubit measurements
-        self._add_final_measurements(current_time)
-        current_time += 1.0
+        final_time = float(self.num_cycles) + 0.5
+        self._add_final_measurements(final_time)
         
         # Add observables if requested
         if self.include_observables and self.logical_operators is not None:
-            self._add_observables(current_time)
+            observable_time = final_time + 0.5
+            self._add_observables(observable_time)
+        
+        # Populate positions for all operations
+        self._populate_operation_positions()
+        
+        # Apply vortex delays if specified
+        if self.vortex_counts is not None:
+            self._apply_vortex_delays()
         
         return self._operations.copy()
     
@@ -207,9 +221,8 @@ class SyndromeCircuit:
             observables = [op for op in operations_at_time if isinstance(op, Observable)]
             cx_gates = [op for op in operations_at_time if isinstance(op, CX)]
             depolarize_ops = [op for op in operations_at_time if isinstance(op, Depolarize2)]
-            ticks = [op for op in operations_at_time if isinstance(op, Tick)]
             
-            # Add operations in order: resets, CX gates + noise, measurements + detectors + observables, ticks
+            # Add operations in order: resets, CX gates + noise, measurements + detectors + observables
             if resets:
                 # Group resets by basis
                 x_resets = [op for op in resets if op.basis == "X"]
@@ -251,9 +264,6 @@ class SyndromeCircuit:
             if observables:
                 for observable in observables:
                     stim_instructions.append(observable.to_stim())
-            
-            if ticks:
-                stim_instructions.append("TICK")
         
         # Create Stim circuit
         circuit_str = "\n".join(stim_instructions)
@@ -377,3 +387,55 @@ class SyndromeCircuit:
                     recent_relative
                 )
                 self._operations.append(detector_op)
+    
+    def _populate_operation_positions(self) -> None:
+        """
+        Populate the position field for all operations based on their affected qubits.
+        Operations without spatial position (Tick, Observable) are left as None.
+        """
+        for operation in self._operations:
+            affected_qubits = operation.affected_qubits()
+            if not affected_qubits:
+                # Operations like Tick, Observable don't have spatial position
+                continue
+            
+            # Get positions of all affected qubits
+            qubit_positions = []
+            for qubit_idx in affected_qubits:
+                position = self.qubit_system.get_qubit_position(qubit_idx)
+                if position is not None:
+                    qubit_positions.append(position)
+            
+            if qubit_positions:
+                # Compute periodic mean of qubit positions
+                mean_position = self.qubit_system.lattice.compute_periodic_mean(qubit_positions)
+                operation.position = mean_position.coords
+    
+    def _apply_vortex_delays(self) -> None:
+        """
+        Apply time delays to operations based on their position and vortex configuration.
+        Delay = dot_product(lattice_coords, vortex_counts) where lattice_coords
+        are the normalized coordinates of the operation position in lattice basis.
+        """
+        if self.vortex_counts is None:
+            return
+        
+        for operation in self._operations:
+            if operation.position is None:
+                # Skip operations without spatial position
+                continue
+            
+            # Ensure position is a proper numpy array
+            position = np.array(operation.position)
+            if position.ndim == 0:
+                # Skip scalar positions
+                continue
+            
+            # Convert position to lattice basis coordinates
+            lattice_coords = self.qubit_system.lattice.lattice_matrix_inv @ position
+            
+            # Compute delay as dot product with vortex counts
+            delay = np.dot(lattice_coords, self.vortex_counts)
+            
+            # Apply delay to operation time
+            operation.time += delay
