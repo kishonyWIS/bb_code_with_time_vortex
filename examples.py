@@ -69,7 +69,7 @@ def toric_code_example(distance: int = 2, rotated: bool = False, basis: str = 'Z
         canonicalize_circuit_errors=True)
     print(f'Minimal found error: {len(minimal_found_error)}')
 
-def bb_code_example(basis: str = 'Z', noisy_cycles: int = 2):
+def bb_code_example(basis: str = 'Z', noisy_cycles: int = 2, vortex_counts: List[int] = [0, 0]):
     """Example demonstrating the BB code."""
     print("\n=== BB Code Example ===")
     lattice_vectors = [[12,0,0,0], [0, 6, 0, 0], [1, 3, 1, 0], [-3, -2, 0, 1]]
@@ -96,7 +96,8 @@ def bb_code_example(basis: str = 'Z', noisy_cycles: int = 2):
         basis=basis,
         include_observables=True,
         include_detectors=True,
-        p_cx=0.001
+        p_cx=0.001,
+        vortex_counts=vortex_counts
     )
 
     # Generate Stim circuit
@@ -229,7 +230,8 @@ def plot_toric_threshold_curve(distances: list = [3, 5, 7],
                               shots_per_point: int = 1000,
                               num_workers: int = 4,
                               basis: str = 'Z',
-                              rotated: bool = False):
+                              rotated: bool = False,
+                              vortex_counts: List[int] = [0, 0]):
     """
     Plot logical error rate vs p_cx for different toric code distances.
     
@@ -278,7 +280,8 @@ def plot_toric_threshold_curve(distances: list = [3, 5, 7],
                     basis=basis,
                     include_observables=True,
                     include_detectors=True,
-                    p_cx=p_cx
+                    p_cx=p_cx,
+                    vortex_counts=vortex_counts
                 )
                 
                 # Generate Stim circuit
@@ -384,7 +387,8 @@ def plot_bb_threshold_curve(p_cx_values: list = [0.001, 0.002, 0.003, 0.004],
                            num_workers: int = 4,
                            basis: str = 'Z',
                            noisy_cycles: int = 2,
-                           max_errors: int = 100):
+                           max_errors: int = 100,
+                           vortex_counts: List[int] = [0, 0, 0, 0]):
     """
     Plot logical error rate vs p_cx for BB.
     
@@ -424,7 +428,8 @@ def plot_bb_threshold_curve(p_cx_values: list = [0.001, 0.002, 0.003, 0.004],
                 basis=basis,
                 include_observables=True,
                 include_detectors=True,
-                p_cx=p_cx
+                p_cx=p_cx,
+                vortex_counts=vortex_counts
             )
             
             # Generate Stim circuit
@@ -518,17 +523,17 @@ def plot_bb_threshold_curve(p_cx_values: list = [0.001, 0.002, 0.003, 0.004],
 
 
 if __name__ == "__main__":
-    toric_code_example(distance=2, rotated=False, basis='Z', vortex_counts=[0, 0])
-    # bb_code_example(basis='Z', noisy_cycles=1)
+    # toric_code_example(distance=2, rotated=False, basis='Z', vortex_counts=[0, 0])
+    # bb_code_example(basis='Z', noisy_cycles=1, vortex_counts=[0, 0, 0, 0])
     
     # Tesseract decoder integration examples:
     # decode_with_tesseract_example(circuit_type='toric', distance=2, shots=1000, p_cx=0.001)
     # decode_with_tesseract_example(circuit_type='bb', shots=1000, p_cx=0.001)
     
-    # # Plot threshold curve for toric code
-    # plot_toric_threshold_curve(distances=[3, 5], p_cx_values=[0.001, 0.002, 0.003, 0.004, 0.005, 0.006, 0.007, 0.008], 
-    #                           shots_per_point=10000, num_workers=10)
+    # Plot threshold curve for toric code
+    plot_toric_threshold_curve(distances=[3, 5], p_cx_values=[0.001, 0.002, 0.003, 0.004, 0.005, 0.006, 0.007, 0.008], 
+                              shots_per_point=10000, num_workers=10, vortex_counts=[1, 0])
     
     # # Plot threshold curve for BB code
     # plot_bb_threshold_curve(p_cx_values=[0.005,0.006,0.007,0.008], 
-    #                        shots_per_point=10000, num_workers=10)
+    #                        shots_per_point=10000, num_workers=10, vortex_counts=[0, 0, 0, 0])

@@ -155,6 +155,40 @@ class GateDescriptor:
             return -1  # negative shift
         else:
             raise ValueError(f"Invalid ancilla type: {self.ancilla_type}")
+    
+    def to_operations(self, qubit_system: QubitSystem, lattice_points: List[Point], 
+                     time: float) -> List[CX]:
+        """
+        Generate CX operations for this descriptor across all lattice points.
+        
+        Args:
+            qubit_system: Qubit system for getting qubit indices
+            lattice_points: List of lattice points to apply gates to
+            time: Time for the operations
+            
+        Returns:
+            List of CX operations
+        """
+        operations = []
+        
+        for point in lattice_points:
+            if self.ancilla_type_enum == AncillaType.X:
+                ancilla_qubit = qubit_system.get_qubit_index(point, "X_anc")
+            else:  # Z
+                ancilla_qubit = qubit_system.get_qubit_index(point, "Z_anc")
+            
+            # Get the connected data qubit using the centralized method
+            data_qubit, data_label = self.get_connected_data_qubit(qubit_system, point)
+            
+            # Create CX gate with consistent direction logic
+            # For X ancillas: control=ancilla, target=data
+            # For Z ancillas: control=data, target=ancilla
+            if self.ancilla_type_enum == AncillaType.X:
+                operations.append(CX(time, ancilla_qubit, data_qubit))
+            else:  # Z
+                operations.append(CX(time, data_qubit, ancilla_qubit))
+        
+        return operations
 
 
 class GateOrder:
@@ -201,65 +235,3 @@ class GateOrder:
             descriptors.append(GateDescriptor("X", f"axis_{axis}"))
         
         return GateOrder(descriptors)
-    
-    def to_operations(self, qubit_system: QubitSystem, lattice_points: List[Point], 
-                     base_time: float) -> List[CX]:
-        """
-        Generate CX operations according to this gate order.
-        
-        Args:
-            qubit_system: Qubit system for getting qubit indices
-            lattice_points: List of lattice points to apply gates to
-            base_time: Starting time for the operations
-            
-        Returns:
-            List of CX operations
-        """
-        operations = []
-        current_time = base_time
-        
-        for descriptor in self.descriptors:
-            for point in lattice_points:
-                cx_ops = self._create_cx_operations_for_descriptor(
-                    qubit_system, point, descriptor, current_time
-                )
-                operations.extend(cx_ops)
-            current_time += 1.0  # Each gate type gets its own time step
-        
-        return operations
-    
-    def _create_cx_operations_for_descriptor(self, qubit_system: QubitSystem, 
-                                           point: Point, 
-                                           descriptor: GateDescriptor, 
-                                           time: float) -> List[CX]:
-        """
-        Create CX operations for a specific gate descriptor at a specific point.
-        
-        Args:
-            qubit_system: Qubit system for getting qubit indices
-            point: Lattice point
-            descriptor: Gate descriptor
-            time: Time for the operations
-            
-        Returns:
-            List of CX operations
-        """
-        operations = []
-        
-        if descriptor.ancilla_type_enum == AncillaType.X:
-            ancilla_qubit = qubit_system.get_qubit_index(point, "X_anc")
-        else:  # Z
-            ancilla_qubit = qubit_system.get_qubit_index(point, "Z_anc")
-        
-        # Get the connected data qubit using the centralized method
-        data_qubit, data_label = descriptor.get_connected_data_qubit(qubit_system, point)
-        
-        # Create CX gate with consistent direction logic
-        # For X ancillas: control=ancilla, target=data
-        # For Z ancillas: control=data, target=ancilla
-        if descriptor.ancilla_type_enum == AncillaType.X:
-            operations.append(CX(time, ancilla_qubit, data_qubit))
-        else:  # Z
-            operations.append(CX(time, data_qubit, ancilla_qubit))
-        
-        return operations

@@ -145,19 +145,3 @@ class Observable(CircuitOperation):
     def affected_qubits(self) -> List[int]:
         """Observables don't directly affect qubits."""
         return []
-
-
-@dataclass
-class Tick(CircuitOperation):
-    """
-    TICK instruction for time separation in Stim.
-    """
-    position: Optional[np.ndarray] = None
-    
-    def to_stim(self) -> str:
-        """Convert to Stim TICK instruction."""
-        return "TICK"
-    
-    def affected_qubits(self) -> List[int]:
-        """TICK affects no qubits."""
-        return []

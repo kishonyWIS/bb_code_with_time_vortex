@@ -5,7 +5,7 @@ Syndrome extraction circuit builder for Stim.
 import stim
 import numpy as np
 from typing import List, Union, Dict, Optional
-from circuit_operations import CircuitOperation, Reset, Measure, Tick, CX, Depolarize2, Detector, Observable
+from circuit_operations import CircuitOperation, Reset, Measure, CX, Depolarize2, Detector, Observable
 from gate_order import GateOrder
 from qubit_system import QubitSystem
 from lattice import Point
@@ -114,10 +114,10 @@ class SyndromeCircuit:
             # Reset all ancillas at cycle start
             self._add_reset_operations(cycle_start_time)
             
-            # Apply CX gates with proper timing
-            for cx_step in range(num_cx_layers):
+            # Apply CX gates with proper timing - one descriptor (layer) at a time
+            for cx_step, descriptor in enumerate(self.gate_order.descriptors):
                 cx_time = cycle_start_time + (cx_step + 1) * dt
-                cx_operations = self.gate_order.to_operations(
+                cx_operations = descriptor.to_operations(
                     self.qubit_system, self.lattice_points, cx_time
                 )
                 self._operations.extend(cx_operations)
@@ -391,12 +391,12 @@ class SyndromeCircuit:
     def _populate_operation_positions(self) -> None:
         """
         Populate the position field for all operations based on their affected qubits.
-        Operations without spatial position (Tick, Observable) are left as None.
+        Operations without spatial position (Observable) are left as None.
         """
         for operation in self._operations:
             affected_qubits = operation.affected_qubits()
             if not affected_qubits:
-                # Operations like Tick, Observable don't have spatial position
+                # Operations like Observable don't have spatial position
                 continue
             
             # Get positions of all affected qubits
