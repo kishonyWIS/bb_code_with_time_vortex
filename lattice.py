@@ -114,6 +114,7 @@ class Lattice:
             raise ValueError("Lattice vectors must be linearly independent")
         
         # Compute the lattice matrix and its inverse for normalization
+        # Lattice vectors are stored as rows in self.lattice_vectors, but should be columns in the matrix
         self.lattice_matrix = self.lattice_vectors.T
         try:
             self.lattice_matrix_inv = np.linalg.inv(self.lattice_matrix)
@@ -209,7 +210,7 @@ class Lattice:
             raise ValueError(f"Point dimension {len(x)} doesn't match lattice dimension {self.dimension}")
         
         n = self.dimension
-        A = self.lattice_vectors.tolist()  # Convert to list for sympy/Fraction
+        A = self.lattice_matrix.tolist()  # Use lattice_matrix (columns) instead of lattice_vectors (rows)
         
         # Try SymPy (exact and robust)
         try:
@@ -382,7 +383,7 @@ class Lattice:
         from itertools import product
         
         n = self.dimension
-        basis = self.lattice_vectors.tolist()
+        basis = self.lattice_matrix.tolist()  # Use lattice_matrix (columns) instead of lattice_vectors (rows)
         
         # Compute determinant using sympy for exact arithmetic
         A_sym = sp.Matrix(basis)

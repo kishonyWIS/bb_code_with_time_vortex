@@ -2,7 +2,7 @@
 Test to verify that hashing and qubit indexing work correctly with periodic boundary conditions.
 """
 
-from lattice import Lattice, LatticePoint
+from lattice import Lattice, Point
 from qubit_system import QubitSystem
 
 
@@ -15,11 +15,11 @@ def test_periodic_hashing_and_indexing():
     qubit_system = QubitSystem(lattice)
     
     # Test points that should be equivalent due to periodicity
-    p1 = LatticePoint([1, 1])
-    p2 = LatticePoint([5, 1])   # Same as p1 (5-4=1)
-    p3 = LatticePoint([1, 5])    # Same as p1 (5-4=1)
-    p4 = LatticePoint([5, 5])    # Same as p1 (both coordinates wrap)
-    p5 = LatticePoint([-3, 1])  # Same as p1 (-3+4=1)
+    p1 = Point([1, 1])
+    p2 = Point([5, 1])   # Same as p1 (5-4=1)
+    p3 = Point([1, 5])    # Same as p1 (5-4=1)
+    p4 = Point([5, 5])    # Same as p1 (both coordinates wrap)
+    p5 = Point([-3, 1])  # Same as p1 (-3+4=1)
     
     print(f"Point 1: {p1}")
     print(f"Point 2: {p2} (should be equivalent to p1)")
@@ -80,16 +80,16 @@ def test_periodic_hashing_and_indexing():
     print(f"✓ All equivalent points get the same qubit indices!")
     
     # Test that different points get different indices
-    p_different = LatticePoint([2, 1])  # Different from p1
+    p_different = Point([2, 1])  # Different from p1
     idx_different = qubit_system.get_qubit_index(p_different, 'L')
     assert idx_different != idx1_L, "Different points should get different qubit indices"
     
     print(f"✓ Different points get different qubit indices!")
     
-    # Test hashing - raw LatticePoint objects have different hashes
+    # Test hashing - raw Point objects have different hashes
     point_set = {p1, p2, p3, p4, p5}
     print(f"\nSet of raw equivalent points has size: {len(point_set)}")
-    print(f"Note: Raw LatticePoint objects have different hashes even if equivalent")
+    print(f"Note: Raw Point objects have different hashes even if equivalent")
     
     # Test normalized hashing
     normalized_set = {lattice.normalize_point(p) for p in [p1, p2, p3, p4, p5]}
@@ -109,11 +109,11 @@ def test_4d_periodic_indexing():
     qubit_system = QubitSystem(lattice)
     
     # Test equivalent 4D points
-    p1 = LatticePoint([1, 1, 1, 1])
-    p2 = LatticePoint([4, 1, 1, 1])  # Equivalent to p1
-    p3 = LatticePoint([1, 4, 1, 1])  # Equivalent to p1
-    p4 = LatticePoint([1, 1, 4, 1])  # Equivalent to p1
-    p5 = LatticePoint([1, 1, 1, 4])  # Equivalent to p1
+    p1 = Point([1, 1, 1, 1])
+    p2 = Point([4, 1, 1, 1])  # Equivalent to p1
+    p3 = Point([1, 4, 1, 1])  # Equivalent to p1
+    p4 = Point([1, 1, 4, 1])  # Equivalent to p1
+    p5 = Point([1, 1, 1, 4])  # Equivalent to p1
     
     # Test qubit indexing
     idx1 = qubit_system.get_qubit_index(p1, 'X_anc')

@@ -2,7 +2,7 @@
 Simple test script to verify the lattice qubit framework functionality.
 """
 
-from lattice import Lattice, LatticePoint
+from lattice import Lattice, Point
 from qubit_system import QubitSystem
 
 
@@ -12,8 +12,8 @@ def test_basic_functionality():
     
     # Test 1: Basic lattice creation and point operations
     lattice = Lattice([[3, 0], [0, 3]])
-    p1 = LatticePoint([1, 1])
-    p2 = LatticePoint([4, 1])  # Should be equivalent to p1
+    p1 = Point([1, 1])
+    p2 = Point([4, 1])  # Should be equivalent to p1
     
     assert lattice.are_equivalent(p1, p2), "Points should be equivalent"
     assert lattice.normalize_point(p2) == p1, "Normalization should work"
@@ -43,7 +43,7 @@ def test_4d_lattice():
     qubit_system = QubitSystem(lattice)
     
     # Test point in 4D
-    point = LatticePoint([1, 1, 1, 1])
+    point = Point([1, 1, 1, 1])
     shifted_point = lattice.get_shifted_point(point, [1, 0, 0, 0])
     
     # Test all qubit types

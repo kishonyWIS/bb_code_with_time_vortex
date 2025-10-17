@@ -55,6 +55,8 @@ class LogicalOperators:
         
         # Compute logical operators
         self.logical_x_ops, self.logical_z_ops = self._compute_logical_operators()
+        print('logical_x_ops: ', self.logical_x_ops)
+        print('logical_z_ops: ', self.logical_z_ops)
     
     def _build_parity_check_matrices(self) -> Tuple[np.ndarray, np.ndarray]:
         """
@@ -89,6 +91,10 @@ class LogicalOperators:
                     col_idx = self.data_qubit_to_index[qubit_idx]
                     hz[stab_idx, col_idx] = 1
         
+        # raise error if not
+        if np.any((hx @ hz.T)%2 != 0):
+            raise ValueError("hx and hz do not commute")
+
         return hx, hz
     
     def _compute_logical_operators(self) -> Tuple[List[np.ndarray], List[np.ndarray]]:
@@ -110,14 +116,18 @@ class LogicalOperators:
         # Find logical Z operators
         # These are in the nullspace of hx but not in the row space of hz
         logical_z_ops = self._find_logical_operators(hx_gf, hz_gf)
+        assert np.all((logical_z_ops @ self.hx.T)%2 == 0)
         
         # Find logical X operators
         # These are in the nullspace of hz but not in the row space of hx
         logical_x_ops = self._find_logical_operators(hz_gf, hx_gf)
-        
+        assert np.all((logical_x_ops @ self.hz.T)%2 == 0)
+
         # Convert back to numpy arrays
         logical_x_ops = [np.array(op, dtype=int) for op in logical_x_ops]
         logical_z_ops = [np.array(op, dtype=int) for op in logical_z_ops]
+
+        assert len(logical_x_ops) == len(logical_z_ops)
         
         return logical_x_ops, logical_z_ops
     
@@ -181,12 +191,15 @@ class LogicalOperators:
         
         # The logical operators are the vectors beyond the rowspace dimension
         logical_ops = basis_vectors[rowspace_basis.shape[0]:]
+
+        # test that the dimensions make sense
+        assert len(logical_ops) == expected_dim
         
         return logical_ops
     
     def get_num_logical_qubits(self) -> int:
         """Get the number of logical qubits encoded by this code."""
-        return min(len(self.logical_x_ops), len(self.logical_z_ops))
+        return len(self.logical_x_ops)
     
     def get_data_qubit_info(self, index: int) -> Tuple[Point, str, int]:
         """

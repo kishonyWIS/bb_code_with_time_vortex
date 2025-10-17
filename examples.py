@@ -47,18 +47,21 @@ def toric_code_example(distance: int = 2, rotated: bool = False, basis: str = 'Z
     stim_circuit = circuit.to_stim_circuit()
     print(stim_circuit)
     print(stim_circuit.detector_error_model())
+    print('number of logical qubits: ', circuit.logical_operators.get_num_logical_qubits())
+
     print(f'Shortest graphlike error: {len(stim_circuit.shortest_graphlike_error())}')
     minimal_found_error = stim_circuit.search_for_undetectable_logical_errors(
         dont_explore_detection_event_sets_with_size_above=9999,
         dont_explore_edges_with_degree_above=9999,
         dont_explore_edges_increasing_symptom_degree=False,
-        canonicalize_circuit_errors=False)
+        canonicalize_circuit_errors=True)
     print(f'Minimal found error: {len(minimal_found_error)}')
 
 def bb_code_example(basis: str = 'Z', noisy_cycles: int = 2):
     """Example demonstrating the BB code."""
     print("\n=== BB Code Example ===")
     lattice_vectors = [[12,0,0,0], [0, 6, 0, 0], [1, 3, 1, 0], [-3, -2, 0, 1]]
+    # lattice_vectors = [[12,0,0,0], [0, 6, 0, 0], [1, 3, -1, 0], [-3, -1, 0, -1]] # from shoham
     print('volume of the lattice: ', np.linalg.det(lattice_vectors))
     lattice = Lattice(lattice_vectors)
     qubit_system = QubitSystem(lattice)
@@ -88,14 +91,14 @@ def bb_code_example(basis: str = 'Z', noisy_cycles: int = 2):
     stim_circuit = circuit.to_stim_circuit()
     print(stim_circuit)
     print(stim_circuit.detector_error_model())
-    print(f'Shortest graphlike error: {len(stim_circuit.shortest_graphlike_error())}')
+    print('number of logical qubits: ', circuit.logical_operators.get_num_logical_qubits())
     minimal_found_error = stim_circuit.search_for_undetectable_logical_errors(
         dont_explore_detection_event_sets_with_size_above=9999,
-        dont_explore_edges_with_degree_above=9999,
+        dont_explore_edges_with_degree_above=4,
         dont_explore_edges_increasing_symptom_degree=False,
-        canonicalize_circuit_errors=False)
+        canonicalize_circuit_errors=True)
     print(f'Minimal found error: {len(minimal_found_error)}')
 
 if __name__ == "__main__":
-    # toric_code_example(2, rotated=True, basis='Z')
-    bb_code_example(basis='Z', noisy_cycles=2)
+    # toric_code_example(distance=2, rotated=True, basis='Z')
+    bb_code_example(basis='Z', noisy_cycles=1)
