@@ -168,6 +168,10 @@ class SyndromeCircuit:
         # Create circuit and append operations
         # Stim automatically handles batching of compatible operations when using +=
         circuit = stim.Circuit()
+        
+        # Add QUBIT_COORDS instructions first
+        circuit += stim.Circuit(self._generate_qubit_coords())
+        
         for op in sorted_operations:
             circuit += stim.Circuit(op.to_stim())
         
@@ -407,6 +411,45 @@ class SyndromeCircuit:
         
         # Update next measurement index for future operations
         self._next_measurement_index = measurement_index
+
+    def _generate_qubit_coords(self) -> str:
+        """
+        Generate QUBIT_COORDS instructions for all qubits in the circuit.
+        
+        For position [i,j]:
+        - Z ancilla: coords = [2i, 2j]
+        - L qubit: coords = [2i+1, 2j]
+        - R qubit: coords = [2i, 2j+1]
+        - X ancilla: coords = [2i+1, 2j+1]
+        
+        Returns:
+            String containing QUBIT_COORDS instructions
+        """
+        coords_lines = []
+        
+        # Get all qubits that are used in the circuit
+        used_qubits = set()
+        if self._operations:
+            for op in self._operations:
+                used_qubits.update(op.affected_qubits())
+        
+        # Generate coordinates for all lattice points
+        for point in self.lattice_points:
+            i, j = int(point.coords[0]), int(point.coords[1])
+            
+            # Get qubit indices for this point
+            z_ancilla = self.qubit_system.get_qubit_index(point, "Z_anc")
+            l_qubit = self.qubit_system.get_qubit_index(point, "L")
+            r_qubit = self.qubit_system.get_qubit_index(point, "R")
+            x_ancilla = self.qubit_system.get_qubit_index(point, "X_anc")
+            
+            # Add coordinates for each qubit type
+            coords_lines.append(f"QUBIT_COORDS({2*i}, {2*j}) {z_ancilla}")      # Z ancilla
+            coords_lines.append(f"QUBIT_COORDS({2*i+1}, {2*j}) {l_qubit}")     # L qubit
+            coords_lines.append(f"QUBIT_COORDS({2*i}, {2*j+1}) {r_qubit}")     # R qubit
+            coords_lines.append(f"QUBIT_COORDS({2*i+1}, {2*j+1}) {x_ancilla}") # X ancilla
+        
+        return "\n".join(coords_lines)
 
     def _apply_vortex_delays(self) -> None:
         """

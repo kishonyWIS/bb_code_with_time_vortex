@@ -526,7 +526,7 @@ def plot_bb_threshold_curve(p_cx_values: list = [0.001, 0.002, 0.003, 0.004],
 
 
 if __name__ == "__main__":
-    toric_code_example(distance=4, noisy_cycles=1, rotated=False, basis='Z', vortex_counts=[0, -1])
+    toric_code_example(distance=3, noisy_cycles=1, rotated=False, basis='Z', vortex_counts=[1, 0])
     # bb_code_example(basis='Z', noisy_cycles=1, vortex_counts=[0, 0, 0, 0])
     
     # Tesseract decoder integration examples:
