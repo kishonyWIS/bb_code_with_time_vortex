@@ -506,9 +506,10 @@ class Lattice:
             shift_ranges = [range(-2, 3) for _ in values]  # Try shifts -2, -1, 0, 1, 2
             
             for shifts in product(*shift_ranges):
-                shifted_values = [(values[i] + shifts[i]) % 1.0 for i in range(len(values))]
+                # Apply shifts to get actual shifted values
+                shifted_values = [values[i] + shifts[i] for i in range(len(values))]
                 
-                # Compute spread (max - min)
+                # Compute spread (max - min) of the actual shifted values
                 spread = max(shifted_values) - min(shifted_values)
                 
                 if spread < min_spread:
@@ -538,7 +539,10 @@ class Lattice:
                             break
                     if improved:
                         break
+            
+            best_mean = sum(current_values) / len(current_values)
         
+        # Normalize the result to [0, 1)
         return best_mean % 1.0
     
     def __repr__(self) -> str:

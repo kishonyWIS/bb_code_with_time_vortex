@@ -80,6 +80,8 @@ class CX(CircuitOperation):
     control: int
     target: int
     position: Optional[np.ndarray] = None
+    control_position: Optional[np.ndarray] = None
+    target_position: Optional[np.ndarray] = None
     
     def to_stim(self) -> str:
         """Convert to Stim CX instruction."""
@@ -99,6 +101,8 @@ class Depolarize2(CircuitOperation):
     qubit2: int
     probability: float
     position: Optional[np.ndarray] = None
+    qubit1_position: Optional[np.ndarray] = None
+    qubit2_position: Optional[np.ndarray] = None
     
     def to_stim(self) -> str:
         """Convert to Stim DEPOLARIZE2 instruction."""

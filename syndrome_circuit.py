@@ -292,6 +292,7 @@ class SyndromeCircuit:
     def _populate_operation_positions(self) -> None:
         """
         Populate the position field for all operations based on their affected qubits.
+        For CX and Depolarize2 operations, also populate individual qubit positions.
         Operations without spatial position (Observable) are left as None.
         """
         for operation in self._operations:
@@ -311,6 +312,24 @@ class SyndromeCircuit:
                 # Compute periodic mean of qubit positions
                 mean_position = self.qubit_system.lattice.compute_periodic_mean(qubit_positions)
                 operation.position = mean_position.coords
+                
+                # For CX operations, populate individual qubit positions
+                if isinstance(operation, CX):
+                    control_pos = self.qubit_system.get_qubit_position(operation.control)
+                    target_pos = self.qubit_system.get_qubit_position(operation.target)
+                    if control_pos is not None:
+                        operation.control_position = control_pos.coords
+                    if target_pos is not None:
+                        operation.target_position = target_pos.coords
+                
+                # For Depolarize2 operations, populate individual qubit positions
+                elif isinstance(operation, Depolarize2):
+                    qubit1_pos = self.qubit_system.get_qubit_position(operation.qubit1)
+                    qubit2_pos = self.qubit_system.get_qubit_position(operation.qubit2)
+                    if qubit1_pos is not None:
+                        operation.qubit1_position = qubit1_pos.coords
+                    if qubit2_pos is not None:
+                        operation.qubit2_position = qubit2_pos.coords
     
     def _build_syndrome_cycles(self) -> None:
         """
@@ -355,7 +374,7 @@ class SyndromeCircuit:
                 
                 # Add noise after CX gates if this is a noisy cycle
                 if is_noisy:
-                    noise_time = cx_time + 1e-9  # Small epsilon after CX gate
+                    noise_time = cx_time + 1e-5  # Small epsilon after CX gate
                     for cx_op in cx_operations:
                         noise_op = Depolarize2(noise_time, cx_op.control, cx_op.target, self.p_cx)
                         self._operations.append(noise_op)

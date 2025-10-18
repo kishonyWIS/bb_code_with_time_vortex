@@ -20,20 +20,23 @@ except ImportError:
     print("Warning: tesseract_decoder not available. Will use alternative decoder.")
 
 
-def toric_code_example(distance: int = 2, rotated: bool = False, basis: str = 'Z', vortex_counts: List[int] = [0, 0]):
+def toric_code_example(distance: int = 2, noisy_cycles: int = None, rotated: bool = False, basis: str = 'Z', vortex_counts: List[int] = [0, 0]):
     """Example demonstrating final data qubit measurements and logical observables."""
     print("\n=== Final Measurements and Observables Example ===")
     
+    if noisy_cycles is None:
+        noisy_cycles = distance
+        
     lattice_vectors = [[distance, 0], [0, distance]] if not rotated else [[distance, -distance], [distance, distance]]
     lattice = Lattice(lattice_vectors)
     qubit_system = QubitSystem(lattice)
     lattice_points = lattice.get_all_lattice_points()
-    # gate_order = GateOrder([
-    #     GateDescriptor("Z", "on_site_L"), GateDescriptor("Z", "axis_0"), GateDescriptor("Z", "on_site_R"), GateDescriptor("Z", "axis_1"),
-    #     GateDescriptor("X", "on_site_L"), GateDescriptor("X", "axis_0"), GateDescriptor("X", "on_site_R"), GateDescriptor("X", "axis_1")])
     gate_order = GateOrder([
         GateDescriptor("Z", "on_site_L"), GateDescriptor("Z", "axis_1"), GateDescriptor("Z", "on_site_R"), GateDescriptor("Z", "axis_0"),
         GateDescriptor("X", "on_site_L"), GateDescriptor("X", "axis_1"), GateDescriptor("X", "on_site_R"), GateDescriptor("X", "axis_0")])
+    # gate_order = GateOrder([
+    #     GateDescriptor("Z", "on_site_L"), GateDescriptor("Z", "on_site_R"), GateDescriptor("Z", "axis_1"), GateDescriptor("Z", "axis_0"),
+    #     GateDescriptor("X", "on_site_L"), GateDescriptor("X", "on_site_R"), GateDescriptor("X", "axis_1"), GateDescriptor("X", "axis_0")])
 
     print('=== Qubit Index to Lattice Point Mapping ===')
     for i, point in enumerate(lattice_points):
@@ -47,7 +50,7 @@ def toric_code_example(distance: int = 2, rotated: bool = False, basis: str = 'Z
     # Create circuit WITH detectors
     circuit = SyndromeCircuit(
         qubit_system, lattice_points, gate_order,
-        num_noisy_cycles=distance,
+        num_noisy_cycles=noisy_cycles,
         basis=basis,
         include_observables=True,
         include_detectors=True,
@@ -523,7 +526,7 @@ def plot_bb_threshold_curve(p_cx_values: list = [0.001, 0.002, 0.003, 0.004],
 
 
 if __name__ == "__main__":
-    toric_code_example(distance=3, rotated=False, basis='Z', vortex_counts=[0, 0])
+    toric_code_example(distance=4, noisy_cycles=1, rotated=False, basis='Z', vortex_counts=[0, -1])
     # bb_code_example(basis='Z', noisy_cycles=1, vortex_counts=[0, 0, 0, 0])
     
     # Tesseract decoder integration examples:
