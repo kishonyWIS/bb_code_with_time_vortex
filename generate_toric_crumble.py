@@ -15,11 +15,8 @@ import urllib.parse
 # CONFIGURATION - Modify these parameters to customize your circuit
 # =============================================================================
 
-# Toric code size (distance x distance)
-DISTANCE = 5
-
 # Number of noisy syndrome extraction cycles (total cycles = 2 + num_noisy_cycles)
-NUM_NOISY_CYCLES = 1
+NUM_NOISY_CYCLES = 5
 
 # Depolarizing error probability after CX gates
 P_CX = 0.001
@@ -29,7 +26,8 @@ BASIS = 'Z'
 
 # Time vortex configuration [vortex_count_x, vortex_count_y]
 # Set to [0, 0] for no vortices, [1, 0] for one vortex in x-direction, etc.
-VORTEX_COUNTS = [1, 0]
+VORTEX_COUNTS = [-1, 0]
+LATTICE_VECTORS = [[3, 0], [0, 7]]
 
 # Whether to include detector instructions
 INCLUDE_DETECTORS = True
@@ -54,20 +52,12 @@ def generate_toric_code_crumble_url():
     """
     
     # Create lattice
-    if ROTATED:
-        lattice_vectors = [[DISTANCE, -DISTANCE], [DISTANCE, DISTANCE]]
-        lattice_type = "rotated"
-    else:
-        lattice_vectors = [[DISTANCE, 0], [0, DISTANCE]]
-        lattice_type = "standard"
-    
-    lattice = Lattice(lattice_vectors)
+    lattice = Lattice(LATTICE_VECTORS)
     qsys = QubitSystem(lattice)
     points = lattice.get_all_lattice_points()
     
     print(f"=== Toric Code Configuration ===")
-    print(f"Size: {DISTANCE}x{DISTANCE} ({lattice_type})")
-    print(f"Lattice vectors: {lattice_vectors}")
+    print(f"Lattice vectors: {LATTICE_VECTORS}")
     print(f"Number of lattice points: {len(points)}")
     print(f"Total qubits: {len(points) * 4}")
     print(f"Noisy cycles: {NUM_NOISY_CYCLES} (total cycles: {2 + NUM_NOISY_CYCLES})")

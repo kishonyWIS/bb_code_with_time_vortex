@@ -91,10 +91,7 @@ class SyndromeCircuit:
         # Stage 1: Build syndrome measurement cycles
         self._build_syndrome_cycles()
         
-        # Populate positions for syndrome operations
-        self._populate_operation_positions()
-        
-        # Apply vortex delays (only affects syndrome operations)
+        # Apply vortex delays (positions already set during operation creation)
         if self.vortex_counts is not None:
             self._apply_vortex_delays()
         
@@ -128,15 +125,21 @@ class SyndromeCircuit:
         for point in self.lattice_points:
             # Reset X ancillas in X basis
             x_ancilla = self.qubit_system.get_qubit_index(point, "X_anc")
-            self._operations.append(Reset(time, x_ancilla, "X"))
+            x_ancilla_pos = self.qubit_system.get_qubit_position(x_ancilla)
+            self._operations.append(Reset(time, x_ancilla, "X", 
+                                         position=x_ancilla_pos.coords if x_ancilla_pos else None))
             
             # Reset Z ancillas in Z basis
             z_ancilla = self.qubit_system.get_qubit_index(point, "Z_anc")
-            self._operations.append(Reset(time, z_ancilla, "Z"))
+            z_ancilla_pos = self.qubit_system.get_qubit_position(z_ancilla)
+            self._operations.append(Reset(time, z_ancilla, "Z",
+                                       position=z_ancilla_pos.coords if z_ancilla_pos else None))
     
     def _add_single_ancilla_measurement(self, time: float, ancilla_idx: int, basis: str) -> None:
         """Helper to measure a single ancilla (no index tracking)."""
-        measure_op = Measure(time, ancilla_idx, basis)
+        ancilla_pos = self.qubit_system.get_qubit_position(ancilla_idx)
+        measure_op = Measure(time, ancilla_idx, basis,
+                            position=ancilla_pos.coords if ancilla_pos else None)
         self._operations.append(measure_op)
     
     def _add_measure_operations(self, time: float) -> None:
@@ -293,48 +296,6 @@ class SyndromeCircuit:
                 )
                 self._operations.append(detector_op)
     
-    def _populate_operation_positions(self) -> None:
-        """
-        Populate the position field for all operations based on their affected qubits.
-        For CX and Depolarize2 operations, also populate individual qubit positions.
-        Operations without spatial position (Observable) are left as None.
-        """
-        for operation in self._operations:
-            affected_qubits = operation.affected_qubits()
-            if not affected_qubits:
-                # Operations like Observable don't have spatial position
-                continue
-            
-            # Get positions of all affected qubits
-            qubit_positions = []
-            for qubit_idx in affected_qubits:
-                position = self.qubit_system.get_qubit_position(qubit_idx)
-                if position is not None:
-                    qubit_positions.append(position)
-            
-            if qubit_positions:
-                # Compute periodic mean of qubit positions
-                mean_position = self.qubit_system.lattice.compute_periodic_mean(qubit_positions)
-                operation.position = mean_position.coords
-                
-                # For CX operations, populate individual qubit positions
-                if isinstance(operation, CX):
-                    control_pos = self.qubit_system.get_qubit_position(operation.control)
-                    target_pos = self.qubit_system.get_qubit_position(operation.target)
-                    if control_pos is not None:
-                        operation.control_position = control_pos.coords
-                    if target_pos is not None:
-                        operation.target_position = target_pos.coords
-                
-                # For Depolarize2 operations, populate individual qubit positions
-                elif isinstance(operation, Depolarize2):
-                    qubit1_pos = self.qubit_system.get_qubit_position(operation.qubit1)
-                    qubit2_pos = self.qubit_system.get_qubit_position(operation.qubit2)
-                    if qubit1_pos is not None:
-                        operation.qubit1_position = qubit1_pos.coords
-                    if qubit2_pos is not None:
-                        operation.qubit2_position = qubit2_pos.coords
-    
     def _build_syndrome_cycles(self) -> None:
         """
         Build syndrome measurement cycles with proper timing.
@@ -380,7 +341,11 @@ class SyndromeCircuit:
                 if is_noisy:
                     noise_time = cx_time + 1e-5  # Small epsilon after CX gate
                     for cx_op in cx_operations:
-                        noise_op = Depolarize2(noise_time, cx_op.control, cx_op.target, self.p_cx)
+                        # Use the same position as the CX operation (already set to ancilla position)
+                        noise_op = Depolarize2(noise_time, cx_op.control, cx_op.target, self.p_cx,
+                                              position=cx_op.position,
+                                              qubit1_position=cx_op.control_position,
+                                              qubit2_position=cx_op.target_position)
                         self._operations.append(noise_op)
             
             # Measure all ancillas at end of cycle

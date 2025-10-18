@@ -177,16 +177,27 @@ class GateDescriptor:
             else:  # Z
                 ancilla_qubit = qubit_system.get_qubit_index(point, "Z_anc")
             
+            # Get ancilla position
+            ancilla_pos = qubit_system.get_qubit_position(ancilla_qubit)
+            position = ancilla_pos.coords if ancilla_pos else None
+            
             # Get the connected data qubit using the centralized method
             data_qubit, data_label = self.get_connected_data_qubit(qubit_system, point)
             
-            # Create CX gate with consistent direction logic
-            # For X ancillas: control=ancilla, target=data
-            # For Z ancillas: control=data, target=ancilla
+            # Get individual positions for control/target
+            data_pos = qubit_system.get_qubit_position(data_qubit)
+            
+            # Create CX gate with positions
             if self.ancilla_type_enum == AncillaType.X:
-                operations.append(CX(time, ancilla_qubit, data_qubit))
+                operations.append(CX(time, ancilla_qubit, data_qubit,
+                                   position=position,
+                                   control_position=position,
+                                   target_position=data_pos.coords if data_pos else None))
             else:  # Z
-                operations.append(CX(time, data_qubit, ancilla_qubit))
+                operations.append(CX(time, data_qubit, ancilla_qubit,
+                                   position=position,
+                                   control_position=data_pos.coords if data_pos else None,
+                                   target_position=position))
         
         return operations
 
