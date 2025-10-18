@@ -58,7 +58,7 @@ def toric_code_example(distance: int = 2, rotated: bool = False, basis: str = 'Z
     # Generate Stim circuit
     stim_circuit = circuit.to_stim_circuit()
     print(stim_circuit)
-    print(stim_circuit.detector_error_model())
+    # print(stim_circuit.detector_error_model())
     print('number of logical qubits: ', circuit.logical_operators.get_num_logical_qubits())
 
     print(f'Shortest graphlike error: {len(stim_circuit.shortest_graphlike_error())}')
@@ -523,16 +523,16 @@ def plot_bb_threshold_curve(p_cx_values: list = [0.001, 0.002, 0.003, 0.004],
 
 
 if __name__ == "__main__":
-    # toric_code_example(distance=2, rotated=False, basis='Z', vortex_counts=[0, 0])
+    toric_code_example(distance=3, rotated=False, basis='Z', vortex_counts=[0, 0])
     # bb_code_example(basis='Z', noisy_cycles=1, vortex_counts=[0, 0, 0, 0])
     
     # Tesseract decoder integration examples:
     # decode_with_tesseract_example(circuit_type='toric', distance=2, shots=1000, p_cx=0.001)
     # decode_with_tesseract_example(circuit_type='bb', shots=1000, p_cx=0.001)
     
-    # Plot threshold curve for toric code
-    plot_toric_threshold_curve(distances=[3, 5], p_cx_values=[0.001, 0.002, 0.003, 0.004, 0.005, 0.006, 0.007, 0.008], 
-                              shots_per_point=10000, num_workers=10, vortex_counts=[1, 0])
+    # # Plot threshold curve for toric code
+    # plot_toric_threshold_curve(distances=[3, 5], p_cx_values=[0.001, 0.002, 0.003, 0.004, 0.005, 0.006, 0.007, 0.008], 
+    #                           shots_per_point=10000, num_workers=10, vortex_counts=[0, 0])
     
     # # Plot threshold curve for BB code
     # plot_bb_threshold_curve(p_cx_values=[0.005,0.006,0.007,0.008], 

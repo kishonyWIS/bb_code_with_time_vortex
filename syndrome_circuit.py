@@ -74,85 +74,52 @@ class SyndromeCircuit:
         """
         Build the complete list of circuit operations for syndrome extraction.
         
-        Uses new timing scheme where each cycle has duration 1.0:
-        - Total steps per cycle: s = len(gate_order.descriptors) + 2
-        - Time step size: dt = 1.0 / s
-        - Cycle i: reset at i, CX gates at i + k*dt, measurements at i + (s-1)*dt
-        
-        For noisy circuits:
-        - First cycle (0): noise-free
-        - Middle cycles (1 to num_noisy_cycles): noisy
-        - Last cycle (num_noisy_cycles + 1): noise-free
-        
-        Adds final measurements and observables at the end.
+        Uses staged construction:
+        1. Build syndrome measurement cycles
+        2. Apply vortex delays to syndrome cycles only
+        3. Add initial state preparation (before syndrome cycles)
+        4. Construct measurement indices from operations
+        5. Add detectors (after syndrome cycles)
+        6. Add final measurements
+        7. Add observables
         
         Returns:
             List of all circuit operations in time order
         """
         self._operations = []
         
-        # Calculate timing parameters
-        num_cx_layers = len(self.gate_order.descriptors)
-        steps_per_cycle = num_cx_layers + 2  # reset + CX gates + measurements
-        dt = 1.0 / steps_per_cycle
+        # Stage 1: Build syndrome measurement cycles
+        self._build_syndrome_cycles()
         
-        # Optional: Add initial state preparation for X-basis measurement
-        if self.basis == 'X':
-            self._add_initial_state_preparation(0.0)
-        
-        for cycle in range(self.num_cycles):
-            cycle_start_time = float(cycle)
-            
-            # Determine if this cycle should be noisy
-            is_noisy = False
-            if self.num_noisy_cycles > 0 and self.p_cx > 0:
-                # First cycle (0) is noise-free
-                # Last cycle (num_cycles - 1) is noise-free
-                # Middle cycles are noisy
-                is_noisy = (cycle > 0 and cycle < self.num_cycles - 1)
-            
-            # Reset all ancillas at cycle start
-            self._add_reset_operations(cycle_start_time)
-            
-            # Apply CX gates with proper timing - one descriptor (layer) at a time
-            for cx_step, descriptor in enumerate(self.gate_order.descriptors):
-                cx_time = cycle_start_time + (cx_step + 1) * dt
-                cx_operations = descriptor.to_operations(
-                    self.qubit_system, self.lattice_points, cx_time
-                )
-                self._operations.extend(cx_operations)
-                
-                # Add noise after CX gates if this is a noisy cycle
-                if is_noisy:
-                    noise_time = cx_time + 1e-9  # Small epsilon after CX gate
-                    for cx_op in cx_operations:
-                        noise_op = Depolarize2(noise_time, cx_op.control, cx_op.target, self.p_cx)
-                        self._operations.append(noise_op)
-            
-            # Measure all ancillas at end of cycle
-            measure_time = cycle_start_time + (steps_per_cycle - 1) * dt
-            self._add_measure_operations(measure_time)
-        
-        # Add detectors after last cycle but before final measurements
-        if self.include_detectors:
-            detector_time = float(self.num_cycles)
-            self._add_detectors_after_circuit(detector_time)
-        
-        # Add final data qubit measurements
-        final_time = float(self.num_cycles) + 0.5
-        self._add_final_measurements(final_time)
-        
-        # Add observables if requested
-        if self.include_observables and self.logical_operators is not None:
-            observable_time = final_time + 0.5
-            self._add_observables(observable_time)
-        
-        # Populate positions for all operations
+        # Populate positions for syndrome operations
         self._populate_operation_positions()
         
-        # Apply vortex delays if specified
+        # Apply vortex delays (only affects syndrome operations)
         if self.vortex_counts is not None:
             self._apply_vortex_delays()
+        
+        # Find time bounds of syndrome cycles
+        min_time = min(op.time for op in self._operations)
+        max_time = max(op.time for op in self._operations)
+        
+        # Stage 2: Add initial state preparation (before syndrome cycles)
+        if self.basis == 'X':
+            self._add_initial_state_preparation(min_time - 1.0)
+        
+        # Stage 3: Construct measurement indices from operations
+        self._construct_measurement_indices()
+        
+        # Stage 4: Add detectors (after syndrome cycles)
+        if self.include_detectors:
+            self._add_detectors_after_circuit(max_time + 1.0)
+        
+        # Stage 5: Add final measurements
+        final_measure_time = max_time + 2.0
+        self._add_final_measurements(final_measure_time)
+        
+        # Stage 6: Add observables
+        if self.include_observables and self.logical_operators is not None:
+            self._add_observables(max_time + 3.0)
         
         return self._operations.copy()
     
@@ -168,15 +135,9 @@ class SyndromeCircuit:
             self._operations.append(Reset(time, z_ancilla, "Z"))
     
     def _add_single_ancilla_measurement(self, time: float, ancilla_idx: int, basis: str) -> None:
-        """Helper to measure a single ancilla and track its measurement index."""
+        """Helper to measure a single ancilla (no index tracking)."""
         measure_op = Measure(time, ancilla_idx, basis)
         self._operations.append(measure_op)
-        
-        # Update measurement index for this qubit
-        if ancilla_idx not in self._measurement_indices:
-            self._measurement_indices[ancilla_idx] = []
-        self._measurement_indices[ancilla_idx].append(self._next_measurement_index)
-        self._next_measurement_index += 1
     
     def _add_measure_operations(self, time: float) -> None:
         """Add measurement operations for all ancillas at the given time."""
@@ -193,6 +154,8 @@ class SyndromeCircuit:
         """
         Convert the operations to a Stim circuit.
         
+        Stim automatically batches compatible operations (e.g., consecutive RX operations).
+        
         Returns:
             Stim circuit object
         """
@@ -202,72 +165,13 @@ class SyndromeCircuit:
         # Sort operations by time
         sorted_operations = sorted(self._operations, key=lambda op: op.time)
         
-        # Group operations by time
-        time_groups = {}
+        # Create circuit and append operations
+        # Stim automatically handles batching of compatible operations when using +=
+        circuit = stim.Circuit()
         for op in sorted_operations:
-            if op.time not in time_groups:
-                time_groups[op.time] = []
-            time_groups[op.time].append(op)
+            circuit += stim.Circuit(op.to_stim())
         
-        # Build Stim circuit
-        stim_instructions = []
-        for time in sorted(time_groups.keys()):
-            operations_at_time = time_groups[time]
-            
-            # Group operations by type for efficiency
-            resets = [op for op in operations_at_time if isinstance(op, Reset)]
-            measures = [op for op in operations_at_time if isinstance(op, Measure)]
-            detectors = [op for op in operations_at_time if isinstance(op, Detector)]
-            observables = [op for op in operations_at_time if isinstance(op, Observable)]
-            cx_gates = [op for op in operations_at_time if isinstance(op, CX)]
-            depolarize_ops = [op for op in operations_at_time if isinstance(op, Depolarize2)]
-            
-            # Add operations in order: resets, CX gates + noise, measurements + detectors + observables
-            if resets:
-                # Group resets by basis
-                x_resets = [op for op in resets if op.basis == "X"]
-                z_resets = [op for op in resets if op.basis == "Z"]
-                
-                if x_resets:
-                    qubits = [op.qubit for op in x_resets]
-                    stim_instructions.append(f"RX {' '.join(map(str, qubits))}")
-                
-                if z_resets:
-                    qubits = [op.qubit for op in z_resets]
-                    stim_instructions.append(f"R {' '.join(map(str, qubits))}")
-            
-            if cx_gates:
-                for cx in cx_gates:
-                    stim_instructions.append(cx.to_stim())
-            
-            if depolarize_ops:
-                for depol in depolarize_ops:
-                    stim_instructions.append(depol.to_stim())
-            
-            if measures:
-                # Group measurements by basis
-                x_measures = [op for op in measures if op.basis == "X"]
-                z_measures = [op for op in measures if op.basis == "Z"]
-                
-                if x_measures:
-                    qubits = [op.qubit for op in x_measures]
-                    stim_instructions.append(f"MX {' '.join(map(str, qubits))}")
-                
-                if z_measures:
-                    qubits = [op.qubit for op in z_measures]
-                    stim_instructions.append(f"M {' '.join(map(str, qubits))}")
-            
-            if detectors:
-                for detector in detectors:
-                    stim_instructions.append(detector.to_stim())
-            
-            if observables:
-                for observable in observables:
-                    stim_instructions.append(observable.to_stim())
-        
-        # Create Stim circuit
-        circuit_str = "\n".join(stim_instructions)
-        return stim.Circuit(circuit_str)
+        return circuit
     
     def get_operations(self) -> List[CircuitOperation]:
         """Get the list of operations (builds if not already built)."""
@@ -326,9 +230,6 @@ class SyndromeCircuit:
             
             self._operations.append(l_measure)
             self._operations.append(r_measure)
-            
-            # Track measurement indices for observables
-            self._next_measurement_index += 2
     
     def _add_observables_for_basis(self, time: float, logical_ops: List[np.ndarray], observable_id_offset: int) -> None:
         """Helper to add observables for a specific basis."""
@@ -411,6 +312,83 @@ class SyndromeCircuit:
                 mean_position = self.qubit_system.lattice.compute_periodic_mean(qubit_positions)
                 operation.position = mean_position.coords
     
+    def _build_syndrome_cycles(self) -> None:
+        """
+        Build syndrome measurement cycles with proper timing.
+        
+        Uses new timing scheme where each cycle has duration 1.0:
+        - Total steps per cycle: s = len(gate_order.descriptors) + 2
+        - Time step size: dt = 1.0 / s
+        - Cycle i: reset at i, CX gates at i + k*dt, measurements at i + (s-1)*dt
+        
+        For noisy circuits:
+        - First cycle (0): noise-free
+        - Middle cycles (1 to num_noisy_cycles): noisy
+        - Last cycle (num_noisy_cycles + 1): noise-free
+        """
+        # Calculate timing parameters
+        num_cx_layers = len(self.gate_order.descriptors)
+        steps_per_cycle = num_cx_layers + 2  # reset + CX gates + measurements
+        dt = 1.0 / steps_per_cycle
+        
+        for cycle in range(self.num_cycles):
+            cycle_start_time = float(cycle)
+            
+            # Determine if this cycle should be noisy
+            is_noisy = False
+            if self.num_noisy_cycles > 0 and self.p_cx > 0:
+                # First cycle (0) is noise-free
+                # Last cycle (num_cycles - 1) is noise-free
+                # Middle cycles are noisy
+                is_noisy = (cycle > 0 and cycle < self.num_cycles - 1)
+            
+            # Reset all ancillas at cycle start
+            self._add_reset_operations(cycle_start_time)
+            
+            # Apply CX gates with proper timing - one descriptor (layer) at a time
+            for cx_step, descriptor in enumerate(self.gate_order.descriptors):
+                cx_time = cycle_start_time + (cx_step + 1) * dt
+                cx_operations = descriptor.to_operations(
+                    self.qubit_system, self.lattice_points, cx_time
+                )
+                self._operations.extend(cx_operations)
+                
+                # Add noise after CX gates if this is a noisy cycle
+                if is_noisy:
+                    noise_time = cx_time + 1e-9  # Small epsilon after CX gate
+                    for cx_op in cx_operations:
+                        noise_op = Depolarize2(noise_time, cx_op.control, cx_op.target, self.p_cx)
+                        self._operations.append(noise_op)
+            
+            # Measure all ancillas at end of cycle
+            measure_time = cycle_start_time + (steps_per_cycle - 1) * dt
+            self._add_measure_operations(measure_time)
+    
+    def _construct_measurement_indices(self) -> None:
+        """
+        Build _measurement_indices dictionary by scanning operations.
+        
+        Sorts operations by time first, then tracks measurement indices
+        for each qubit. This ensures indices are correct after vortex delays.
+        """
+        # Sort operations by time
+        sorted_ops = sorted(self._operations, key=lambda op: op.time)
+        
+        # Track measurement indices
+        self._measurement_indices = {}
+        measurement_index = 0
+        
+        for op in sorted_ops:
+            if isinstance(op, Measure):
+                qubit = op.qubit
+                if qubit not in self._measurement_indices:
+                    self._measurement_indices[qubit] = []
+                self._measurement_indices[qubit].append(measurement_index)
+                measurement_index += 1
+        
+        # Update next measurement index for future operations
+        self._next_measurement_index = measurement_index
+
     def _apply_vortex_delays(self) -> None:
         """
         Apply time delays to operations based on their position and vortex configuration.
