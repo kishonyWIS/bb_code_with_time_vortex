@@ -305,12 +305,17 @@ class SyndromeCircuit:
                 recent_relative = self._next_measurement_index - recent_idx
                 previous_relative = self._next_measurement_index - previous_idx
                 
+                # Set detector position to ancilla spatial coordinates for (x,y,t)
+                ancilla_point = self.qubit_system.get_qubit_position(ancilla_idx)
                 detector_op = Detector(
-                    time, 
+                    time,
                     ancilla_idx,  # Dummy qubit index (not used in Stim)
-                    previous_relative, 
-                    recent_relative
+                    previous_relative,
+                    recent_relative,
+                    position=(ancilla_point.coords if ancilla_point is not None else None)
                 )
+                # Use later measurement time for 3D coord t without changing placement time
+                detector_op.coord_time = self._measurement_index_to_time.get(recent_idx, time)
                 self._operations.append(detector_op)
     
     def _build_syndrome_cycles(self) -> None:
@@ -381,6 +386,8 @@ class SyndromeCircuit:
         
         # Track measurement indices
         self._measurement_indices = {}
+        # Map absolute measurement index to its operation time
+        self._measurement_index_to_time = {}
         measurement_index = 0
         
         for op in sorted_ops:
@@ -389,6 +396,7 @@ class SyndromeCircuit:
                 if qubit not in self._measurement_indices:
                     self._measurement_indices[qubit] = []
                 self._measurement_indices[qubit].append(measurement_index)
+                self._measurement_index_to_time[measurement_index] = op.time
                 measurement_index += 1
         
         # Update next measurement index for future operations

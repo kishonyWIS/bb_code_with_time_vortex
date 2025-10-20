@@ -30,6 +30,25 @@ class QubitSystem:
         self.lattice = lattice
         self._qubit_index_map: Dict[Tuple[Point, str], int] = {}
         self._next_index = 0
+
+        # Precompute a deterministic, order-independent mapping from (Point, label)
+        # to Stim qubit indices. Points are normalized and ordered row-major by
+        # their coordinates; labels are assigned in QUBIT_LABELS order.
+        all_points = self.lattice.get_all_lattice_points()
+        # Normalize and deduplicate points by their coordinate tuple
+        normalized_unique_points: Dict[Tuple[float, ...], Point] = {}
+        for p in all_points:
+            np_p = self.lattice.normalize_point(p)
+            key = tuple(np_p.coords.tolist())
+            if key not in normalized_unique_points:
+                normalized_unique_points[key] = np_p
+        # Sort by row-major order of coordinates
+        sorted_points: List[Point] = [normalized_unique_points[k] for k in sorted(normalized_unique_points.keys())]
+
+        for point in sorted_points:
+            for label in self.QUBIT_LABELS:
+                self._qubit_index_map[(point, label)] = self._next_index
+                self._next_index += 1
     
     def get_qubit_index(self, point: Union[Point, np.ndarray, List[Union[int, float]]], 
                        label: str) -> int:
@@ -51,9 +70,7 @@ class QubitSystem:
         key = (normalized_point, label)
         
         if key not in self._qubit_index_map:
-            self._qubit_index_map[key] = self._next_index
-            self._next_index += 1
-        
+            raise ValueError(f"Qubit (point={normalized_point.coords.tolist()}, label={label}) is not in the precomputed lattice qubit set.")
         return self._qubit_index_map[key]
     
     def get_qubit_pair(self, point: Union[Point, np.ndarray, List[Union[int, float]]], 

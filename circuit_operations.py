@@ -121,10 +121,24 @@ class Detector(CircuitOperation):
     qubit: int
     previous_measurement_index: int  # Index of previous measurement (for rec[-k])
     current_measurement_index: int   # Index of current measurement (for rec[-k])
+    # Optional separate time used for 3D coordinate t (e.g., later measurement time)
+    coord_time: Optional[float] = None
     position: Optional[np.ndarray] = None
     
     def to_stim(self) -> str:
-        """Convert to Stim DETECTOR instruction."""
+        """Convert to Stim DETECTOR instruction, including coords if available."""
+        # If we have a spatial position, include (x, y, t) coordinates
+        if self.position is not None:
+            try:
+                x, y = float(self.position[0]), float(self.position[1])
+                t = float(self.coord_time if self.coord_time is not None else self.time)
+                return (
+                    f"DETECTOR({x}, {y}, {t}) "
+                    f"rec[-{self.current_measurement_index}] rec[-{self.previous_measurement_index}]"
+                )
+            except Exception:
+                # Fallback to no-coordinate form if anything goes wrong
+                pass
         return f"DETECTOR rec[-{self.current_measurement_index}] rec[-{self.previous_measurement_index}]"
     
     def affected_qubits(self) -> List[int]:

@@ -16,7 +16,7 @@ import urllib.parse
 # =============================================================================
 
 # Number of noisy syndrome extraction cycles (total cycles = 2 + num_noisy_cycles)
-NUM_NOISY_CYCLES = 1
+NUM_NOISY_CYCLES = 7
 
 # Depolarizing error probability after CX gates
 P_CX = 0.001
@@ -27,17 +27,10 @@ BASIS = 'Z'
 # Time vortex configuration [vortex_count_x, vortex_count_y]
 # Set to [0, 0] for no vortices, [1, 0] for one vortex in x-direction, etc.
 VORTEX_COUNTS = [0, 0]
-LATTICE_VECTORS = [[2, 0], [0, 2]]
-
-# Whether to include X/Z detector instructions
-INCLUDE_X_DETECTORS = True
-INCLUDE_Z_DETECTORS = True
+LATTICE_VECTORS = [[5, 0], [0, 5]]
 
 # Whether to include observable instructions
 INCLUDE_OBSERVABLES = True
-
-# Whether to use rotated toric code
-ROTATED = False
 
 # Whether to analyze logical errors and distances
 ANALYZE_ERRORS = True
@@ -65,8 +58,6 @@ def generate_toric_code_crumble_url():
     print(f"Noise probability: {P_CX}")
     print(f"Basis: {BASIS}")
     print(f"Vortex counts: {VORTEX_COUNTS}")
-    print(f"X detectors: {INCLUDE_X_DETECTORS}")
-    print(f"Z detectors: {INCLUDE_Z_DETECTORS}")
     print(f"Observables: {INCLUDE_OBSERVABLES}")
     print(f"Error analysis: {ANALYZE_ERRORS}")
     
@@ -81,8 +72,8 @@ def generate_toric_code_crumble_url():
     gate_order = GateOrder([
         GateDescriptor('X', 'on_site_R'), GateDescriptor('Z', 'axis_0'),
         GateDescriptor('X', 'axis_1'), GateDescriptor('Z', 'on_site_R'),
-        GateDescriptor('X', 'axis_0'), GateDescriptor('Z', 'on_site_L'),
         GateDescriptor('X', 'on_site_L'), GateDescriptor('Z', 'axis_1'),
+        GateDescriptor('X', 'axis_0'), GateDescriptor('Z', 'on_site_L'),
     ])
 
 
@@ -92,9 +83,7 @@ def generate_toric_code_crumble_url():
         num_noisy_cycles=NUM_NOISY_CYCLES,
         p_cx=P_CX,
         basis=BASIS, 
-        include_observables=INCLUDE_OBSERVABLES, 
-        include_x_detectors=INCLUDE_X_DETECTORS,
-        include_z_detectors=INCLUDE_Z_DETECTORS,
+        include_observables=INCLUDE_OBSERVABLES,
         vortex_counts=VORTEX_COUNTS
     )
     
@@ -106,10 +95,21 @@ def generate_toric_code_crumble_url():
     encoded_circuit = urllib.parse.quote(circuit_str)
     crumble_url = f"https://algassert.com/crumble#circuit={encoded_circuit}"
     
+    # Also generate a 3D matching graph HTML
+    try:
+        diag = stim_circuit.diagram('matchgraph-3d-html')
+        output_path = 'matchgraph_3d.html'
+        with open(output_path, 'w', encoding='utf-8') as f:
+            f.write(str(diag))
+        print(f"\nWrote 3D match graph to {output_path}")
+    except Exception as e:
+        print(f"\nFailed to generate 3D match graph: {e}")
+    
     return crumble_url, circuit_str, circuit
 
 def main():
     """Generate and display the Crumble URL."""
+
     
     print("=== Toric Code Crumble URL Generator ===\n")
     
@@ -118,13 +118,13 @@ def main():
     
     # Generate Stim circuit for error analysis
     stim_circuit = circuit.to_stim_circuit()
+
+        # Show circuit structure
+    print(f"\n=== Circuit Structure ===")
+    print(stim_circuit)
     
     print(f"\n=== Generated Crumble URL ===")
     print(url)
-    
-    # Show circuit structure
-    print(f"\n=== Circuit Structure ===")
-    print(stim_circuit)
     
     # Show timing information
     print(f"\n=== Timing Information ===")
