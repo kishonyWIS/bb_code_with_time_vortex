@@ -53,7 +53,8 @@ def toric_code_example(distance: int = 2, noisy_cycles: int = None, rotated: boo
         num_noisy_cycles=noisy_cycles,
         basis=basis,
         include_observables=True,
-        include_detectors=True,
+        include_x_detectors=True,
+        include_z_detectors=True,
         p_cx=0.001,
         vortex_counts=vortex_counts
     )
@@ -98,7 +99,8 @@ def bb_code_example(basis: str = 'Z', noisy_cycles: int = 2, vortex_counts: List
         num_noisy_cycles=noisy_cycles,
         basis=basis,
         include_observables=True,
-        include_detectors=True,
+        include_x_detectors=True,
+        include_z_detectors=True,
         p_cx=0.001,
         vortex_counts=vortex_counts
     )
@@ -172,7 +174,8 @@ def decode_with_tesseract_example(circuit_type: str = 'toric', distance: int = 2
         num_noisy_cycles=noisy_cycles,
         basis=basis,
         include_observables=True,
-        include_detectors=True,
+        include_x_detectors=True,
+        include_z_detectors=True,
         p_cx=p_cx
     )
     
@@ -282,7 +285,8 @@ def plot_toric_threshold_curve(distances: list = [3, 5, 7],
                     num_noisy_cycles=distance,
                     basis=basis,
                     include_observables=True,
-                    include_detectors=True,
+                    include_x_detectors=True,
+                    include_z_detectors=True,
                     p_cx=p_cx,
                     vortex_counts=vortex_counts
                 )
@@ -430,7 +434,8 @@ def plot_bb_threshold_curve(p_cx_values: list = [0.001, 0.002, 0.003, 0.004],
                 num_noisy_cycles=noisy_cycles,
                 basis=basis,
                 include_observables=True,
-                include_detectors=True,
+                include_x_detectors=True,
+                include_z_detectors=True,
                 p_cx=p_cx,
                 vortex_counts=vortex_counts
             )

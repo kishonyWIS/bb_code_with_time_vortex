@@ -16,7 +16,7 @@ import urllib.parse
 # =============================================================================
 
 # Number of noisy syndrome extraction cycles (total cycles = 2 + num_noisy_cycles)
-NUM_NOISY_CYCLES = 5
+NUM_NOISY_CYCLES = 1
 
 # Depolarizing error probability after CX gates
 P_CX = 0.001
@@ -26,11 +26,12 @@ BASIS = 'Z'
 
 # Time vortex configuration [vortex_count_x, vortex_count_y]
 # Set to [0, 0] for no vortices, [1, 0] for one vortex in x-direction, etc.
-VORTEX_COUNTS = [-1, 0]
-LATTICE_VECTORS = [[3, 0], [0, 7]]
+VORTEX_COUNTS = [0, 0]
+LATTICE_VECTORS = [[2, 0], [0, 2]]
 
-# Whether to include detector instructions
-INCLUDE_DETECTORS = True
+# Whether to include X/Z detector instructions
+INCLUDE_X_DETECTORS = True
+INCLUDE_Z_DETECTORS = True
 
 # Whether to include observable instructions
 INCLUDE_OBSERVABLES = True
@@ -64,18 +65,27 @@ def generate_toric_code_crumble_url():
     print(f"Noise probability: {P_CX}")
     print(f"Basis: {BASIS}")
     print(f"Vortex counts: {VORTEX_COUNTS}")
-    print(f"Detectors: {INCLUDE_DETECTORS}")
+    print(f"X detectors: {INCLUDE_X_DETECTORS}")
+    print(f"Z detectors: {INCLUDE_Z_DETECTORS}")
     print(f"Observables: {INCLUDE_OBSERVABLES}")
     print(f"Error analysis: {ANALYZE_ERRORS}")
     
+    # # Create gate order
+    # gate_order = GateOrder([
+    #     GateDescriptor('Z', 'on_site_L'), GateDescriptor('Z', 'axis_1'), 
+    #     GateDescriptor('Z', 'on_site_R'), GateDescriptor('Z', 'axis_0'),
+    #     GateDescriptor('X', 'on_site_L'), GateDescriptor('X', 'axis_1'), 
+    #     GateDescriptor('X', 'on_site_R'), GateDescriptor('X', 'axis_0')
+    # ])
     # Create gate order
     gate_order = GateOrder([
-        GateDescriptor('Z', 'on_site_L'), GateDescriptor('Z', 'axis_1'), 
-        GateDescriptor('Z', 'on_site_R'), GateDescriptor('Z', 'axis_0'),
-        GateDescriptor('X', 'on_site_L'), GateDescriptor('X', 'axis_1'), 
-        GateDescriptor('X', 'on_site_R'), GateDescriptor('X', 'axis_0')
+        GateDescriptor('X', 'on_site_R'), GateDescriptor('Z', 'axis_0'),
+        GateDescriptor('X', 'axis_1'), GateDescriptor('Z', 'on_site_R'),
+        GateDescriptor('X', 'axis_0'), GateDescriptor('Z', 'on_site_L'),
+        GateDescriptor('X', 'on_site_L'), GateDescriptor('Z', 'axis_1'),
     ])
-    
+
+
     # Create circuit
     circuit = SyndromeCircuit(
         qsys, points, gate_order, 
@@ -83,7 +93,8 @@ def generate_toric_code_crumble_url():
         p_cx=P_CX,
         basis=BASIS, 
         include_observables=INCLUDE_OBSERVABLES, 
-        include_detectors=INCLUDE_DETECTORS, 
+        include_x_detectors=INCLUDE_X_DETECTORS,
+        include_z_detectors=INCLUDE_Z_DETECTORS,
         vortex_counts=VORTEX_COUNTS
     )
     
@@ -113,13 +124,7 @@ def main():
     
     # Show circuit structure
     print(f"\n=== Circuit Structure ===")
-    lines = circuit_str.split('\n')
-    print(f"Total circuit lines: {len(lines)}")
-    print(f"First 15 lines:")
-    for i, line in enumerate(lines[:15]):
-        print(f"{i+1:3}: {line}")
-    if len(lines) > 15:
-        print(f"... and {len(lines) - 15} more lines")
+    print(stim_circuit)
     
     # Show timing information
     print(f"\n=== Timing Information ===")

@@ -21,7 +21,8 @@ class SyndromeCircuit:
                  gate_order: GateOrder, num_cycles: int = None, 
                  num_noisy_cycles: int = 0, p_cx: float = 0.0,
                  basis: str = 'Z', include_observables: bool = True, 
-                 include_detectors: bool = True, vortex_counts: Optional[List[int]] = None):
+                 include_x_detectors: Optional[bool] = None, include_z_detectors: Optional[bool] = None, 
+                 vortex_counts: Optional[List[int]] = None):
         """
         Initialize syndrome circuit builder.
         
@@ -34,7 +35,8 @@ class SyndromeCircuit:
             p_cx: Depolarizing error probability after CX gates
             basis: Basis for data qubit measurements ('Z' or 'X')
             include_observables: Whether to include observable instructions
-            include_detectors: Whether to include detector instructions
+            include_x_detectors: Whether to include detectors for X ancillas (defaults to basis=='X')
+            include_z_detectors: Whether to include detectors for Z ancillas (defaults to basis=='Z')
             vortex_counts: List of vortex counts per lattice vector (length = lattice.dimension)
         """
         self.qubit_system = qubit_system
@@ -42,7 +44,13 @@ class SyndromeCircuit:
         self.gate_order = gate_order
         self.basis = basis
         self.include_observables = include_observables
-        self.include_detectors = include_detectors
+        # Defaults: include detectors matching the measurement basis only
+        if include_x_detectors is None and include_z_detectors is None:
+            self.include_x_detectors = (basis == 'X')
+            self.include_z_detectors = (basis == 'Z')
+        else:
+            self.include_x_detectors = (basis == 'X') if include_x_detectors is None else include_x_detectors
+            self.include_z_detectors = (basis == 'Z') if include_z_detectors is None else include_z_detectors
         
         # Validate vortex_counts
         if vortex_counts is not None:
@@ -107,7 +115,7 @@ class SyndromeCircuit:
         self._construct_measurement_indices()
         
         # Stage 4: Add detectors (after syndrome cycles)
-        if self.include_detectors:
+        if self.include_x_detectors or self.include_z_detectors:
             self._add_detectors_after_circuit(max_time + 1.0)
         
         # Stage 5: Add final measurements
@@ -276,6 +284,15 @@ class SyndromeCircuit:
         """
         # Create detectors for consecutive measurements of each ancilla
         for ancilla_idx, measurement_indices in self._measurement_indices.items():
+            # Filter by ancilla type if requested
+            info = self.qubit_system.get_qubit_info(ancilla_idx)
+            ancilla_label = info[1] if info is not None else None
+            if ancilla_label is None:
+                continue
+            if ancilla_label == 'X_anc' and not self.include_x_detectors:
+                continue
+            if ancilla_label == 'Z_anc' and not self.include_z_detectors:
+                continue
             # For each ancilla, create detectors between consecutive measurements
             for i in range(len(measurement_indices) - 1):
                 # Detector compares consecutive measurements
