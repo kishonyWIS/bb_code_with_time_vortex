@@ -18,9 +18,9 @@ class SyndromeCircuit:
     """
     
     def __init__(self, qubit_system: QubitSystem, lattice_points: List[Point], 
-                 gate_order: GateOrder, num_cycles: int = None, 
-                 num_noisy_cycles: int = 0, p_cx: float = 0.0,
-                 basis: str = 'Z', include_observables: bool = True, 
+                 gate_order: GateOrder, num_noisy_cycles: int = 0, 
+                 num_noiseless_cycles_init: int = 1, num_noiseless_cycles_final: int = 1,
+                 p_cx: float = 0.0, basis: str = 'Z', include_observables: bool = True, 
                  include_x_detectors: Optional[bool] = None, include_z_detectors: Optional[bool] = None, 
                  vortex_counts: Optional[List[int]] = None):
         """
@@ -30,8 +30,9 @@ class SyndromeCircuit:
             qubit_system: Qubit system for getting qubit indices
             lattice_points: List of lattice points to include in syndrome extraction
             gate_order: Ordering of CX gates
-            num_cycles: Number of syndrome extraction cycles (deprecated, use num_noisy_cycles)
-            num_noisy_cycles: Number of noisy cycles (total cycles = 2 + num_noisy_cycles)
+            num_noisy_cycles: Number of noisy cycles (total cycles = num_noiseless_cycles_init + num_noisy_cycles + num_noiseless_cycles_final)
+            num_noiseless_cycles_init: Number of noiseless cycles at the beginning (default: 1)
+            num_noiseless_cycles_final: Number of noiseless cycles at the end (default: 1)
             p_cx: Depolarizing error probability after CX gates
             basis: Basis for data qubit measurements ('Z' or 'X')
             include_observables: Whether to include observable instructions
@@ -58,15 +59,13 @@ class SyndromeCircuit:
                 raise ValueError(f"vortex_counts length {len(vortex_counts)} must equal lattice dimension {qubit_system.lattice.dimension}")
         self.vortex_counts = vortex_counts
         
-        # Handle backwards compatibility
-        if num_cycles is not None and num_noisy_cycles == 0:
-            # Old style: num_cycles specifies total cycles, all noise-free
-            self.num_cycles = num_cycles
-            self.num_noisy_cycles = 0
-        else:
-            # New style: 2 + num_noisy_cycles total cycles
-            self.num_noisy_cycles = num_noisy_cycles
-            self.num_cycles = 2 + num_noisy_cycles if num_noisy_cycles > 0 else (num_cycles or 1)
+        # Store noiseless cycle counts
+        self.num_noiseless_cycles_init = num_noiseless_cycles_init
+        self.num_noiseless_cycles_final = num_noiseless_cycles_final
+        self.num_noisy_cycles = num_noisy_cycles
+        
+        # Calculate total cycles
+        self.num_cycles = num_noiseless_cycles_init + num_noisy_cycles + num_noiseless_cycles_final
         
         self.p_cx = p_cx
         self._operations: List[CircuitOperation] = []
@@ -328,9 +327,9 @@ class SyndromeCircuit:
         - Cycle i: reset at i, CX gates at i + k*dt, measurements at i + (s-1)*dt
         
         For noisy circuits:
-        - First cycle (0): noise-free
-        - Middle cycles (1 to num_noisy_cycles): noisy
-        - Last cycle (num_noisy_cycles + 1): noise-free
+        - Initial cycles (0 to num_noiseless_cycles_init-1): noise-free
+        - Middle cycles: noisy
+        - Final cycles (last num_noiseless_cycles_final cycles): noise-free
         """
         # Calculate timing parameters
         num_cx_layers = len(self.gate_order.descriptors)
@@ -343,10 +342,11 @@ class SyndromeCircuit:
             # Determine if this cycle should be noisy
             is_noisy = False
             if self.num_noisy_cycles > 0 and self.p_cx > 0:
-                # First cycle (0) is noise-free
-                # Last cycle (num_cycles - 1) is noise-free
+                # Initial cycles (0 to num_noiseless_cycles_init-1) are noise-free
+                # Final cycles (num_cycles - num_noiseless_cycles_final to num_cycles-1) are noise-free
                 # Middle cycles are noisy
-                is_noisy = (cycle > 0 and cycle < self.num_cycles - 1)
+                is_noisy = (cycle >= self.num_noiseless_cycles_init and 
+                            cycle < self.num_cycles - self.num_noiseless_cycles_final)
             
             # Reset all ancillas at cycle start
             self._add_reset_operations(cycle_start_time)

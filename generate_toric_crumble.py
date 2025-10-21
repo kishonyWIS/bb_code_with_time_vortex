@@ -10,13 +10,16 @@ from qubit_system import QubitSystem
 from gate_order import GateOrder, GateDescriptor
 from syndrome_circuit import SyndromeCircuit
 import urllib.parse
+import stim
 
 # =============================================================================
 # CONFIGURATION - Modify these parameters to customize your circuit
 # =============================================================================
 
-# Number of noisy syndrome extraction cycles (total cycles = 2 + num_noisy_cycles)
-NUM_NOISY_CYCLES = 7
+# Number of noisy syndrome extraction cycles (total cycles = num_noiseless_cycles_init + num_noisy_cycles + num_noiseless_cycles_final)
+NUM_NOISY_CYCLES = 1
+NUM_NOISLESS_CYCLES_INIT = 6
+NUM_NOISLESS_CYCLES_FINAL = 6
 
 # Depolarizing error probability after CX gates
 P_CX = 0.001
@@ -26,8 +29,8 @@ BASIS = 'Z'
 
 # Time vortex configuration [vortex_count_x, vortex_count_y]
 # Set to [0, 0] for no vortices, [1, 0] for one vortex in x-direction, etc.
-VORTEX_COUNTS = [0, 0]
-LATTICE_VECTORS = [[5, 0], [0, 5]]
+VORTEX_COUNTS = [2, 0]
+LATTICE_VECTORS = [[7, 0], [0, 11]]
 
 # Whether to include observable instructions
 INCLUDE_OBSERVABLES = True
@@ -81,6 +84,8 @@ def generate_toric_code_crumble_url():
     circuit = SyndromeCircuit(
         qsys, points, gate_order, 
         num_noisy_cycles=NUM_NOISY_CYCLES,
+        num_noiseless_cycles_init=NUM_NOISLESS_CYCLES_INIT,
+        num_noiseless_cycles_final=NUM_NOISLESS_CYCLES_FINAL,
         p_cx=P_CX,
         basis=BASIS, 
         include_observables=INCLUDE_OBSERVABLES,
@@ -162,9 +167,9 @@ def main():
         
         try:
             # Get shortest graphlike error
-            shortest_error = stim_circuit.shortest_graphlike_error()
+            shortest_error = stim_circuit.shortest_graphlike_error(canonicalize_circuit_errors=True)
             print(f"Shortest graphlike error: {len(shortest_error)}")
-            
+            # explain_explanations(stim_circuit, shortest_error)
             # Search for minimal undetectable logical errors
             minimal_error = stim_circuit.search_for_undetectable_logical_errors(
                 dont_explore_detection_event_sets_with_size_above=9999,
@@ -173,12 +178,25 @@ def main():
                 canonicalize_circuit_errors=True
             )
             print(f"Minimal found error: {len(minimal_error)}")
+            # explain_explanations(stim_circuit, minimal_error)
         except ValueError as e:
             print(f"Error analysis failed: {str(e)}")
             print("This is likely due to non-deterministic observables (X-basis measurements with Z-basis observables)")
     elif ANALYZE_ERRORS and not INCLUDE_OBSERVABLES:
         print(f"\n=== Error Analysis ===")
         print("Error analysis requires observables to be enabled (INCLUDE_OBSERVABLES = True)")
+
+def explain_explanations(c:stim.Circuit, explanations):
+    for i, ex in enumerate(explanations):
+        print(f"---- Explanation #{i} ----")
+        # Which DEM terms (detectors/logicals) the shortest error hits:
+        for term in ex.dem_error_terms:
+            print("DEM term:", term)
+        # Where in the circuit those terms came from:
+        for loc in ex.circuit_error_locations:
+            print("At instruction index:", loc.stack_frames[-1].instruction_offset,
+                "gate:", c[loc.stack_frames[-1].instruction_offset].name,
+                "targets:", c[loc.stack_frames[-1].instruction_offset].targets_copy())
 
 if __name__ == "__main__":
     main()
