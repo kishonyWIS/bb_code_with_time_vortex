@@ -17,7 +17,7 @@ import stim
 # =============================================================================
 
 # Number of noisy syndrome extraction cycles (total cycles = num_noiseless_cycles_init + num_noisy_cycles + num_noiseless_cycles_final)
-NUM_NOISY_CYCLES = 1
+NUM_NOISY_CYCLES = 2
 NUM_NOISLESS_CYCLES_INIT = 6
 NUM_NOISLESS_CYCLES_FINAL = 6
 
@@ -29,8 +29,8 @@ BASIS = 'Z'
 
 # Time vortex configuration [vortex_count_x, vortex_count_y]
 # Set to [0, 0] for no vortices, [1, 0] for one vortex in x-direction, etc.
-VORTEX_COUNTS = [2, 0]
-LATTICE_VECTORS = [[7, 0], [0, 11]]
+VORTEX_COUNTS = [1, 0]
+LATTICE_VECTORS = [[4, 0], [0, 5]]
 
 # Whether to include observable instructions
 INCLUDE_OBSERVABLES = True

@@ -81,6 +81,16 @@ def bb_code_example(basis: str = 'Z', noisy_cycles: int = 2, vortex_counts: List
     qubit_system = QubitSystem(lattice)
     lattice_points = lattice.get_all_lattice_points()
     gate_order = GateOrder.get_default_order(lattice.dimension)
+    # # same as in bb code paper with labels L,R exchanged
+    # gate_order = GateOrder([
+    #     GateDescriptor("Z", "on_site_L"),
+    #     GateDescriptor("X", "axis_0"), GateDescriptor("Z", "axis_2"),
+    #     GateDescriptor("X", "axis_1"), GateDescriptor("Z", "on_site_R"),
+    #     GateDescriptor("X", "on_site_L"), GateDescriptor("Z", "axis_1"),
+    #     GateDescriptor("X", "axis_3"), GateDescriptor("Z", "axis_3"),
+    #     GateDescriptor("X", "on_site_R"), GateDescriptor("Z", "axis_0"),
+    #     GateDescriptor("X", "axis_2")
+    #     ])
 
     print('\n=== Qubit Index to Lattice Point Mapping ===')
     for i, point in enumerate(lattice_points):
@@ -419,6 +429,17 @@ def plot_bb_threshold_curve(p_cx_values: list = [0.001, 0.002, 0.003, 0.004],
             qubit_system = QubitSystem(lattice)
             lattice_points = lattice.get_all_lattice_points()
             gate_order = GateOrder.get_default_order(lattice.dimension)
+
+            # # same as in bb code paper with labels L,R exchanged
+            # gate_order = GateOrder([
+            #     GateDescriptor("Z", "on_site_L"),
+            #     GateDescriptor("X", "axis_0"), GateDescriptor("Z", "axis_2"),
+            #     GateDescriptor("X", "axis_1"), GateDescriptor("Z", "on_site_R"),
+            #     GateDescriptor("X", "on_site_L"), GateDescriptor("Z", "axis_1"),
+            #     GateDescriptor("X", "axis_3"), GateDescriptor("Z", "axis_3"),
+            #     GateDescriptor("X", "on_site_R"), GateDescriptor("Z", "axis_0"),
+            #     GateDescriptor("X", "axis_2")
+            #     ])
             
             # Create circuit with detectors and observables
             circuit = SyndromeCircuit(
@@ -521,8 +542,8 @@ def plot_bb_threshold_curve(p_cx_values: list = [0.001, 0.002, 0.003, 0.004],
 
 
 if __name__ == "__main__":
-    toric_code_example(distance=2, noisy_cycles=1, rotated=False, basis='Z', vortex_counts=[0, 0])
-    # bb_code_example(basis='Z', noisy_cycles=1, vortex_counts=[0, 0, 0, 0])
+    # toric_code_example(distance=2, noisy_cycles=1, rotated=False, basis='Z', vortex_counts=[0, 0])
+    bb_code_example(basis='Z', noisy_cycles=1, vortex_counts=[0, 0, 0, 0])
     
     # Tesseract decoder integration examples:
     # decode_with_tesseract_example(circuit_type='toric', distance=2, shots=1000, p_cx=0.001)
