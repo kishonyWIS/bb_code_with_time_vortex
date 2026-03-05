@@ -93,6 +93,24 @@ class CX(CircuitOperation):
 
 
 @dataclass
+class Depolarize1(CircuitOperation):
+    """
+    1-qubit depolarizing noise operation.
+    """
+    qubit: int
+    probability: float
+    position: Optional[np.ndarray] = None
+    
+    def to_stim(self) -> str:
+        """Convert to Stim DEPOLARIZE1 instruction."""
+        return f"DEPOLARIZE1({self.probability}) {self.qubit}"
+    
+    def affected_qubits(self) -> List[int]:
+        """Return list of affected qubits."""
+        return [self.qubit]
+
+
+@dataclass
 class Depolarize2(CircuitOperation):
     """
     2-qubit depolarizing noise operation.

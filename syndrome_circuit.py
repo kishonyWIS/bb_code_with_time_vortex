@@ -5,7 +5,7 @@ Syndrome extraction circuit builder for Stim.
 import stim
 import numpy as np
 from typing import List, Union, Dict, Optional
-from circuit_operations import CircuitOperation, Reset, Measure, CX, Depolarize2, Detector, Observable
+from circuit_operations import CircuitOperation, Reset, Measure, CX, Depolarize1, Depolarize2, Detector, Observable
 from gate_order import GateOrder
 from qubit_system import QubitSystem
 from lattice import Point
@@ -20,7 +20,7 @@ class SyndromeCircuit:
     def __init__(self, qubit_system: QubitSystem, lattice_points: List[Point], 
                  gate_order: GateOrder, num_noisy_cycles: int = 0, 
                  num_noiseless_cycles_init: int = 1, num_noiseless_cycles_final: int = 1,
-                 p_cx: float = 0.0, basis: str = 'Z', include_observables: bool = True, 
+                 p_cx: float = 0.0, p_phenomenological: float = 0.0, basis: str = 'Z', include_observables: bool = True, 
                  include_x_detectors: Optional[bool] = None, include_z_detectors: Optional[bool] = None, 
                  vortex_counts: Optional[List[int]] = None):
         """
@@ -34,6 +34,7 @@ class SyndromeCircuit:
             num_noiseless_cycles_init: Number of noiseless cycles at the beginning (default: 1)
             num_noiseless_cycles_final: Number of noiseless cycles at the end (default: 1)
             p_cx: Depolarizing error probability after CX gates
+            p_phenomenological: Depolarizing error probability for phenomenological noise (applied to data qubits at cycle start and before measurements)
             basis: Basis for data qubit measurements ('Z' or 'X')
             include_observables: Whether to include observable instructions
             include_x_detectors: Whether to include detectors for X ancillas (defaults to basis=='X')
@@ -68,6 +69,7 @@ class SyndromeCircuit:
         self.num_cycles = num_noiseless_cycles_init + num_noisy_cycles + num_noiseless_cycles_final
         
         self.p_cx = p_cx
+        self.p_phenomenological = p_phenomenological
         self._operations: List[CircuitOperation] = []
         self._measurement_indices: Dict[int, List[int]] = {}  # Maps qubit -> list of measurement indices
         self._next_measurement_index = 0
@@ -159,6 +161,40 @@ class SyndromeCircuit:
             # Measure Z ancillas in Z basis
             z_ancilla = self.qubit_system.get_qubit_index(point, "Z_anc")
             self._add_single_ancilla_measurement(time, z_ancilla, "Z")
+    
+    def _add_phenomenological_noise(self, time: float) -> None:
+        """Add depolarizing noise to all data qubits at the given time."""
+        for point in self.lattice_points:
+            # Add noise to L qubit
+            l_qubit = self.qubit_system.get_qubit_index(point, 'L')
+            l_qubit_pos = self.qubit_system.get_qubit_position(l_qubit)
+            noise_l = Depolarize1(time, l_qubit, self.p_phenomenological,
+                                 position=l_qubit_pos.coords if l_qubit_pos else None)
+            self._operations.append(noise_l)
+            
+            # Add noise to R qubit
+            r_qubit = self.qubit_system.get_qubit_index(point, 'R')
+            r_qubit_pos = self.qubit_system.get_qubit_position(r_qubit)
+            noise_r = Depolarize1(time, r_qubit, self.p_phenomenological,
+                                 position=r_qubit_pos.coords if r_qubit_pos else None)
+            self._operations.append(noise_r)
+    
+    def _add_phenomenological_noise_on_ancillas(self, time: float) -> None:
+        """Add depolarizing noise to all ancilla qubits at the given time."""
+        for point in self.lattice_points:
+            # Add noise to X ancilla
+            x_ancilla = self.qubit_system.get_qubit_index(point, "X_anc")
+            x_ancilla_pos = self.qubit_system.get_qubit_position(x_ancilla)
+            noise_x = Depolarize1(time, x_ancilla, self.p_phenomenological,
+                                 position=x_ancilla_pos.coords if x_ancilla_pos else None)
+            self._operations.append(noise_x)
+            
+            # Add noise to Z ancilla
+            z_ancilla = self.qubit_system.get_qubit_index(point, "Z_anc")
+            z_ancilla_pos = self.qubit_system.get_qubit_position(z_ancilla)
+            noise_z = Depolarize1(time, z_ancilla, self.p_phenomenological,
+                                 position=z_ancilla_pos.coords if z_ancilla_pos else None)
+            self._operations.append(noise_z)
     
     def to_stim_circuit(self) -> stim.Circuit:
         """
@@ -341,7 +377,7 @@ class SyndromeCircuit:
             
             # Determine if this cycle should be noisy
             is_noisy = False
-            if self.num_noisy_cycles > 0 and self.p_cx > 0:
+            if self.num_noisy_cycles > 0 and (self.p_cx > 0 or self.p_phenomenological > 0):
                 # Initial cycles (0 to num_noiseless_cycles_init-1) are noise-free
                 # Final cycles (num_cycles - num_noiseless_cycles_final to num_cycles-1) are noise-free
                 # Middle cycles are noisy
@@ -350,6 +386,11 @@ class SyndromeCircuit:
             
             # Reset all ancillas at cycle start
             self._add_reset_operations(cycle_start_time)
+            
+            # Add phenomenological noise at cycle start on data qubits (only during noisy cycles)
+            if is_noisy and self.p_phenomenological > 0:
+                noise_time = cycle_start_time + 1e-6  # Small epsilon after reset
+                self._add_phenomenological_noise(noise_time)
             
             # Apply CX gates with proper timing - one descriptor (layer) at a time
             for cx_step, descriptor in enumerate(self.gate_order.descriptors):
@@ -372,6 +413,12 @@ class SyndromeCircuit:
             
             # Measure all ancillas at end of cycle
             measure_time = cycle_start_time + (steps_per_cycle - 1) * dt
+            
+            # Add phenomenological noise before measurements on ancillas (only during noisy cycles)
+            if is_noisy and self.p_phenomenological > 0:
+                premeasure_noise_time = measure_time - 1e-5  # Small epsilon before measurement
+                self._add_phenomenological_noise_on_ancillas(premeasure_noise_time)
+            
             self._add_measure_operations(measure_time)
     
     def _construct_measurement_indices(self) -> None:

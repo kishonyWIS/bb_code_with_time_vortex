@@ -1,0 +1,4 @@
+vortex_0,vortex_1,vortex_2,vortex_3,logical_error_rate,error_bar,shots,errors,p_phenomenological,p_cx,num_logical_qubits,distance,num_physical_qubits
+0,0,0,0,0.004137062372565257,0.00024138963549144316,287402,1189,0.0,0.001,4,3,36
+1,0,0,0,0.002602439035249803,0.0001533060849748919,449194,1169,0.0,0.001,4,3,36
+-1,0,0,0,nan,nan,0,0,0.0,0.001,4,,36
